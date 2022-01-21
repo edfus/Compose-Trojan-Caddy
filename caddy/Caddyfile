@@ -1,11 +1,20 @@
-https://{$DOMAIN_HOSTNAME:localhost} {
+http://{$DOMAIN_HOSTNAME:localhost}:80 {
+	redir https://{$DOMAIN_HOSTNAME}
+	tls {
+		issuer acme {
+			disable_tlsalpn_challenge
+		}
+	}
+}
+
+http://:4433 {
 	encode gzip
 	route {
 		redir /config /config/
 
 		route /config/* {
 			basicauth bcrypt {
-				${USERNAME} ${PASSWD_BCRYPTED}
+				{$USERNAME} {$PASSWD_BCRYPTED}
 			}
 		}
 

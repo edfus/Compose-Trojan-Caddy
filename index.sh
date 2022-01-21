@@ -1,14 +1,14 @@
 #!/bin/bash
 
-set -e
+# set -e
 
-blue(){
+blue () {
     echo -e "\033[34m\033[01m$1\033[0m"
 }
-green(){
+green () {
     echo -e "\033[32m\033[01m$1\033[0m"
 }
-red(){
+red () {
     echo -e "\033[31m\033[01m$1\033[0m"
 }
 
@@ -42,50 +42,56 @@ elif cat /proc/version | grep -Eqi "centos|red hat|redhat"; then
     systempwd="/usr/lib/systemd/system/"
 fi
 
-function install_trojan(){
-port80=`netstat -tlpn | awk -F '[: ]+' '$1=="tcp"{print $5}' | grep -w 80`
-port443=`netstat -tlpn | awk -F '[: ]+' '$1=="tcp"{print $5}' | grep -w 443`
-if [ -n "$port80" ]; then
-    process80=`netstat -tlpn | awk -F '[: ]+' '$5=="80"{print $9}'`
-    red "==========================================================="
-    red "Port 80 is already in use by process ${process80}"
-    red "==========================================================="
+function up () {
+  port80=`netstat -tlpn | awk -F '[: ]+' '$1=="tcp"{print $5}' | grep -w 80`
+  port443=`netstat -tlpn | awk -F '[: ]+' '$1=="tcp"{print $5}' | grep -w 443`
+  if [ -n "$port80" ]; then
+      process80=`netstat -tlpn | awk -F '[: ]+' '$5=="80"{print $9}'`
+      red "==========================================================="
+      red "Port 80 is already in use by process ${process80}"
+      red "==========================================================="
+      exit 1
+  fi
+
+  if [ -n "$port443" ]; then
+      process443=`netstat -tlpn | awk -F '[: ]+' '$5=="443"{print $9}'`
+      red "============================================================="
+      red "Port 443 is already in use by process ${process443}"
+      red "============================================================="
+      exit 1
+  fi
+
+  CHECK=$(grep SELINUX= /etc/selinux/config | grep -v "#")
+  if [ "$CHECK" == "SELINUX=enforcing" ] || [ "$CHECK" == "SELINUX=permissive" ]; then
+      red "======================================================================="
+      red "SELinux is enabled and may hamper the process of requesting site certificates"
+      red "======================================================================="
+      read -p "Disable SELinux and reboot the machine? [Y/n]:" yn
+    [ -z "${yn}" ] && yn="y"
+    if [[ $yn == [Yy] ]]; then
+        sed -i 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/selinux/config
+        sed -i 's/SELINUX=permissive/SELINUX=disabled/g' /etc/selinux/config
+              setenforce 0
+        echo -e "Rebooting..."
+        reboot
+    fi
+      exit
+  fi
+
+  read -p "$(blue 'Enter the domain name: ')" DOMAIN_NAME
+  read -e -i "$DOMAIN_NAME" -p "$(blue 'Enter the profile name: ')" PROFILE_NAME
+
+  green "Checking for possible DNS resolution failures..."
+  real_addr=`ping ${DOMAIN_NAME} -c 1 | sed '1{s/[^(]*(//;s/).*//;q}'`
+  local_addr=`curl ipv4.icanhazip.com`
+
+  if [ "$real_addr" != "$local_addr" ] ; then
+    red "================================"
+    red "$real_addr != $local_addr"
+    red "================================"
     exit 1
-fi
+  fi
 
-if [ -n "$port443" ]; then
-    process443=`netstat -tlpn | awk -F '[: ]+' '$5=="443"{print $9}'`
-    red "============================================================="
-    red "Port 443 is already in use by process ${process443}"
-    red "============================================================="
-    exit 1
-fi
-
-CHECK=$(grep SELINUX= /etc/selinux/config | grep -v "#")
-if [ "$CHECK" == "SELINUX=enforcing" || "$CHECK" == "SELINUX=permissive" ]; then
-    red "======================================================================="
-    red "SELinux is enabled and may hamper the process of requesting site certificates"
-    red "======================================================================="
-    read -p "Disable SELinux and reboot the machine? [Y/n]:" yn
-	[ -z "${yn}" ] && yn="y"
-	if [[ $yn == [Yy] ]]; then
-	    sed -i 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/selinux/config
-      sed -i 's/SELINUX=permissive/SELINUX=disabled/g' /etc/selinux/config
-            setenforce 0
-	    echo -e "Rebooting..."
-	    reboot
-	fi
-    exit
-fi
-
-read -p "$(blue 'Enter the domain name: ')" DOMAIN_NAME
-read -e -i "$DOMAIN_NAME" -p "$(blue 'Enter the profile name: ')" PROFILE_NAME
-
-green "Checking for possible DNS resolution failures..."
-real_addr=`ping ${DOMAIN_NAME} -c 1 | sed '1{s/[^(]*(//;s/).*//;q}'`
-local_addr=`curl ipv4.icanhazip.com`
-
-if [ "$real_addr" == "$local_addr" ] ; then
   green "Generating a good random password..."
   readonly TROJAN_PASSWORD="$(uuidgen)-2022-v1.0"
 
@@ -104,7 +110,7 @@ if [ "$real_addr" == "$local_addr" ] ; then
     "local_addr": "0.0.0.0",
     "local_port": 443,
     "remote_addr": "caddy",
-    "remote_port": 80,
+    "remote_port": 4433,
     "password": [
         "$TROJAN_PASSWORD"
     ],
@@ -139,8 +145,8 @@ if [ "$real_addr" == "$local_addr" ] ; then
 }
 EOF
 
-mkdir ./caddy/config
-cat >./caddy/config/clash.yml<< EOF
+  mkdir ./caddy/config
+  cat >./caddy/config/clash.yml<< EOF
 port: 7890
 socks-port: 7891
 allow-lan: true
@@ -194,46 +200,49 @@ dns:
     - https://1.1.1.1/dns-query
 EOF
 
-readonly CONFIG_USERNAME=clash
-readonly CONFIG_PASSWORD=$(uuidgen)
-readonly CONFIG_PASSWORD_BCRYPTED=$(docker run caddy/caddy:alpine caddy hash-password --plaintext "$CONFIG_PASSWORD")
+  readonly CONFIG_USERNAME=clash
+  readonly CONFIG_PASSWORD=$(uuidgen)
+  readonly CONFIG_PASSWORD_BCRYPTED=$(docker run caddy/caddy:alpine caddy hash-password --plaintext "$CONFIG_PASSWORD")
 
-cat > .env <<EOF
+  cat > .env <<EOF
 DOMAIN_NAME=$DOMAIN_NAME
 USERNAME=$CONFIG_USERNAME
 PASSWD_BCRYPTED=$CONFIG_PASSWORD_BCRYPTED
 EOF
-
 	green "Starting docker containers..."
-	docker-compose up -d --build
+	docker-compose --env-file .env up -d --build
 	
 	green "======================="
-  green "USER: $CONFIG_USERNAME"
-  green "PASSWD: ${CONFIG_PASSWORD}"
-  green "TROJAN PASSWD: ${TROJAN_PASSWORD}"
+  blue "USER: $CONFIG_USERNAME"
+  blue "PASSWD: ${CONFIG_PASSWORD}"
+  blue "TROJAN PASSWD: ${TROJAN_PASSWORD}"
   blue "Config files is available at https://${DOMAIN_NAME}/config/"
-else
-	red "================================"
-	red "$real_addr != $local_addr"
-	red "================================"
-fi
+  green "======================="
 }
 
-function install_docker(){
-  curl -fsSL https://get.docker.com -o get-docker.sh && sh get-docker.sh
-  systemctl start docker
-  systemctl enable docker
-  usermod -aG docker $USER
-}
-
-function install_docker_compose(){
-	$systemPackage -y install  python-pip
-	pip install --upgrade pip
-	pip install docker-compose
-
-	if [ $? = 1 ]; then
-    curl -L "https://github.com/docker/compose/releases/download/1.25.4/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-    chmod +x /usr/local/bin/docker-compose
-    ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
+function install_docker () {  
+  docker -v >/dev/null 2>&1
+  if [ $? != 0 ]; then
+    curl -fsSL https://get.docker.com -o get-docker.sh && sh get-docker.sh
+    systemctl start docker
+    systemctl enable docker
+    usermod -aG docker $USER
   fi
 }
+
+function install_docker_compose () {
+  docker-compose -v >/dev/null 2>&1
+  if [ $? != 0 ]; then
+    $systemPackage -y install  python-pip
+    pip install --upgrade pip
+    pip install docker-compose
+
+    if [ $? == 1 ]; then
+      curl -L "https://github.com/docker/compose/releases/download/1.25.4/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+      chmod +x /usr/local/bin/docker-compose
+      ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
+    fi
+  fi
+}
+
+up
