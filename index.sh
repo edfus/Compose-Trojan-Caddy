@@ -114,7 +114,7 @@ function up () {
     "password": [
         "$TROJAN_PASSWORD"
     ],
-    "log_level": 1,
+    "log_level": 2,
     "ssl": {
         "cert": "/ssl/$DOMAIN_NAME/$DOMAIN_NAME.crt",
         "key": "/ssl/$DOMAIN_NAME/$DOMAIN_NAME.key",
@@ -145,7 +145,7 @@ function up () {
 }
 EOF
 
-  mkdir ./caddy/config
+  mkdir -p ./caddy/config
   cat >./caddy/config/clash.yml<< EOF
 port: 7890
 socks-port: 7891
@@ -153,7 +153,7 @@ allow-lan: true
 mode: Rule
 log-level: info
 external-controller: 127.0.0.1:9090
-xperimental:
+experimental:
   ignore-resolve-fail: true
 proxies:
   - name: "$PROFILE_NAME"
@@ -216,7 +216,7 @@ EOF
   blue "USER: $CONFIG_USERNAME"
   blue "PASSWD: ${CONFIG_PASSWORD}"
   blue "TROJAN PASSWD: ${TROJAN_PASSWORD}"
-  blue "Config files is available at https://${DOMAIN_NAME}/config/"
+  blue "Config files is available at https://$CONFIG_USERNAME:${CONFIG_PASSWORD}@${DOMAIN_NAME}/config/"
   green "======================="
 }
 

@@ -1,5 +1,12 @@
-http://{$DOMAIN_HOSTNAME:localhost}:80 {
-	redir https://{$DOMAIN_HOSTNAME}
+{
+	servers {
+		protocol {
+			allow_h2c
+		}
+	}
+}
+
+{$DOMAIN_HOSTNAME:localhost} {
 	tls {
 		issuer acme {
 			disable_tlsalpn_challenge
@@ -16,16 +23,10 @@ http://:4433 {
 			basicauth bcrypt {
 				{$USERNAME} {$PASSWD_BCRYPTED}
 			}
-		}
 
-		route /config/ {
-			file_server browse
-		}
-
-		route /config/*.yaml {
-			header {
-				Content-Disposition "attachment; filename={http.auth.user.id}-config.yml"
-				Content-Type application/x-yaml
+			file_server {
+				root /var/www/{$DOMAIN_HOSTNAME:localhost}
+				browse
 			}
 		}
 
@@ -47,12 +48,12 @@ http://:4433 {
 			}
 		}
 	}
+
+	handle_errors {
+		respond "{http.error.status_code} {http.error.status_text}"
+	}
 }
 
 http://127.0.0.1:8081 {
 	respond /health-check 200
-}
-
-handle_errors {
-	respond "{http.error.status_code} {http.error.status_text}"
 }
