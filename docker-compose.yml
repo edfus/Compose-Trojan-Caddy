@@ -26,6 +26,7 @@ services:
       - DOMAIN_HOSTNAME=${DOMAIN_NAME}
       - PASSWD_BCRYPTED=${PASSWD_BCRYPTED}
       - USERNAME=${USERNAME}
+      - FILENAME=${FILENAME}
     networks:
       - frontend
     volumes:

@@ -24,6 +24,16 @@ http://:4433 {
 				{$USERNAME} {$PASSWD_BCRYPTED}
 			}
 
+			@clashrequests {
+				file
+				header_regexp ua user-agent "(?i)^clash.+"
+			}
+
+			header @clashrequests {
+				Content-Disposition "attachment; filename={$FILENAME:Config}"
+				Content-Type application/x-yaml
+			}
+
 			file_server {
 				root /var/www/{$DOMAIN_HOSTNAME:localhost}
 				browse

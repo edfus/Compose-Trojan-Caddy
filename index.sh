@@ -82,14 +82,13 @@ function up () {
   read -e -i "$DOMAIN_NAME" -p "$(blue 'Enter the profile name: ')" PROFILE_NAME
 
   green "Checking for possible DNS resolution failures..."
-  real_addr=`ping ${DOMAIN_NAME} -c 1 | sed '1{s/[^(]*(//;s/).*//;q}'`
+  real_addr=`ping ${DOMAIN_NAME} -c 1 2> /dev/null | sed '1{s/[^(]*(//;s/).*//;q}'`
   local_addr=`curl ipv4.icanhazip.com`
 
   if [ "$real_addr" != "$local_addr" ] ; then
     red "================================"
     red "$real_addr != $local_addr"
     red "================================"
-    exit 1
   fi
 
   green "Generating a good random password..."
@@ -201,12 +200,14 @@ dns:
 EOF
 
   readonly CONFIG_USERNAME=clash
+  readonly CONFIG_FILENAME="$PROFILE_NAME $local_addr"
   readonly CONFIG_PASSWORD=$(uuidgen)
   readonly CONFIG_PASSWORD_BCRYPTED=$(docker run caddy/caddy:alpine caddy hash-password --plaintext "$CONFIG_PASSWORD")
 
   cat > .env <<EOF
 DOMAIN_NAME=$DOMAIN_NAME
 USERNAME=$CONFIG_USERNAME
+FILENAME=$CONFIG_FILENAME
 PASSWD_BCRYPTED=$CONFIG_PASSWORD_BCRYPTED
 EOF
 	green "Starting docker containers..."
@@ -216,7 +217,7 @@ EOF
   blue "USER: $CONFIG_USERNAME"
   blue "PASSWD: ${CONFIG_PASSWORD}"
   blue "TROJAN PASSWD: ${TROJAN_PASSWORD}"
-  blue "Config files is available at https://$CONFIG_USERNAME:${CONFIG_PASSWORD}@${DOMAIN_NAME}/config/"
+  blue "Config files is available at https://$CONFIG_USERNAME:${CONFIG_PASSWORD}@${DOMAIN_NAME}/config/clash.yml"
   green "======================="
 }
 
@@ -231,14 +232,15 @@ function install_docker () {
 }
 
 function install_docker_compose () {
+  set +e
   docker-compose -v >/dev/null 2>&1
   if [ $? != 0 ]; then
     $systemPackage -y install  python-pip
     pip install --upgrade pip
     pip install docker-compose
 
-    if [ $? == 1 ]; then
-      curl -L "https://github.com/docker/compose/releases/download/1.25.4/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+    if [ $? != 0 ]; then
+      curl -L "https://github.com/docker/compose/releases/download/v2.2.3/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
       chmod +x /usr/local/bin/docker-compose
       ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
     fi
