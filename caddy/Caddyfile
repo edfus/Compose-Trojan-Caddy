@@ -1,0 +1,49 @@
+https://{$DOMAIN_HOSTNAME:localhost} {
+	encode gzip
+	route {
+		redir /config /config/
+
+		route /config/* {
+			basicauth bcrypt {
+				${USERNAME} ${PASSWD_BCRYPTED}
+			}
+		}
+
+		route /config/ {
+			file_server browse
+		}
+
+		route /config/*.yaml {
+			header {
+				Content-Disposition "attachment; filename={http.auth.user.id}-config.yml"
+				Content-Type application/x-yaml
+			}
+		}
+
+		respond "Shop opening hours: Morndas to Fredas 8 am - 5 pm"
+	}
+
+	log {
+		output stdout
+		format filter {
+			wrap json
+			fields {
+				request>headers>Authorization delete
+
+				common_log delete -- delete ip address
+				request>remote_addr ip_mask {
+					ipv4 24
+					ipv6 32
+				}
+			}
+		}
+	}
+}
+
+http://127.0.0.1:8081 {
+	respond /health-check 200
+}
+
+handle_errors {
+	respond "{http.error.status_code} {http.error.status_text}"
+}

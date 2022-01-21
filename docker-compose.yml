@@ -1,0 +1,25 @@
+version: '3'
+
+services:
+  trojan:
+      build: ./trojan
+      ports:
+        - "443:443"
+      volumes:
+        - ./trojan/config:/config
+        - ./ssl:/ssl
+        - ./trojan/wait_for_caddy.sh:/wait_for_caddy.sh
+      depends_on: 
+        - caddy
+
+  caddy:
+      image: caddy/caddy:alpine
+      ports:
+        - "80:80"
+      environment:
+        - DOMAIN_HOSTNAME=${DOMAIN_NAME}
+        - PASSWD_BCRYPTED=${PASSWD_BCRYPTED}
+        - USERNAME=${USERNAME}
+      volumes:
+        - ./caddy/Caddyfile:/etc/Caddyfile
+        - ./ssl:/root/.caddy/acme/acme-v02.api.letsencrypt.org/sites
