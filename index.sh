@@ -170,7 +170,8 @@ proxy-groups:
     type: select
     proxies:
       - "$PROFILE_NAME"
-  - name: Auto - UrlTest
+      - "Auto - UrlTest"
+  - name: "Auto - UrlTest"
     type: url-test
     proxies:
       - "$PROFILE_NAME"

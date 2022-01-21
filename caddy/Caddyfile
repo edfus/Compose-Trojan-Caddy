@@ -25,12 +25,15 @@ http://:4433 {
 			}
 
 			@clashrequests {
-				file
-				header_regexp ua user-agent "(?i)^clash.+"
+				file {
+					try_policy first_exist
+					root /var/www/{$DOMAIN_HOSTNAME:localhost}
+				}
+				header_regexp ua User-Agent "(?i)^clash.+"
 			}
 
 			header @clashrequests {
-				Content-Disposition "attachment; filename={$FILENAME:Config}"
+				Content-Disposition "filename={$FILENAME:Config}"
 				Content-Type application/x-yaml
 			}
 
