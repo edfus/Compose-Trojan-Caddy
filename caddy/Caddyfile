@@ -17,6 +17,8 @@
 http://:4433 {
 	encode gzip
 	route {
+		reverse_proxy {$DOH_PATH:/dns-query}* http://doh:8053
+
 		redir /config /config/
 
 		route /config/* {
@@ -35,6 +37,8 @@ http://:4433 {
 			header @clashrequests {
 				Content-Disposition "filename={$FILENAME:Config}"
 				Content-Type application/x-yaml
+				Profile-Update-Interval 12
+				Subscription-Userinfo "expire={$EXPIRE:2274253409}"
 			}
 
 			file_server {

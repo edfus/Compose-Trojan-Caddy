@@ -43,6 +43,8 @@ elif cat /proc/version | grep -Eqi "centos|red hat|redhat"; then
 fi
 
 function up () {
+  docker-compose down
+
   port80=`netstat -tlpn | awk -F '[: ]+' '$1=="tcp"{print $5}' | grep -w 80`
   port443=`netstat -tlpn | awk -F '[: ]+' '$1=="tcp"{print $5}' | grep -w 443`
   if [ -n "$port80" ]; then
@@ -79,7 +81,6 @@ function up () {
   fi
 
   read -p "$(blue 'Enter the domain name: ')" DOMAIN_NAME
-  read -e -i "$DOMAIN_NAME" -p "$(blue 'Enter the profile name: ')" PROFILE_NAME
 
   green "Checking for possible DNS resolution failures..."
   real_addr=`ping ${DOMAIN_NAME} -c 1 2> /dev/null | sed '1{s/[^(]*(//;s/).*//;q}'`
@@ -98,8 +99,6 @@ function up () {
 
   install_docker
   install_docker_compose
-
-  docker-compose down
 
   green "Creating Trojan config..."
   mkdir -p ./trojan/config
@@ -143,6 +142,17 @@ function up () {
     }
 }
 EOF
+  read -e -i "$DOMAIN_NAME" -p "$(blue 'Enter the profile name: ')" PROFILE_NAME
+  read -e -i "$(date "+%m/%d/%Y" -d "3 months")" -p "$(blue 'Any determined expiration date? [%m/%d/%Y] ')" DISCONTINUATION_DATE 
+  set +e
+  date -d "${DISCONTINUATION_DATE:-??}" "+%m/%d/%Y" >/dev/null 2>&1
+  if [ $? != 0 ]; then
+    DISCONTINUATION_DATE=$(date "+%m/%d/%Y" -d "2 years")
+  fi
+  DISCONTINUATION_DATE=$(date "+%s" -d "$DISCONTINUATION_DATE")
+  
+  read -e -i "/$(cat /dev/urandom | head -c 4 | hexdump -e '"%x"')" -p "$(blue 'Enter the DoH URI path: ')" DOH_PATH 
+  DOH_PATH="$(echo "$DOH_PATH" | sed -r 's/^\/*([^\/])/\/\1/')"
 
   mkdir -p ./caddy/config
   cat >./caddy/config/clash.yml<< EOF
@@ -160,11 +170,9 @@ proxies:
     server: $DOMAIN_NAME
     port: 443
     password: "$TROJAN_PASSWORD"
-    # udp: true
+    udp: true
     alpn:
-    - h2
-    - http/1.1
-    skip-cert-verify: true
+      - h2
 proxy-groups:
   - name: Proxy
     type: select
@@ -181,23 +189,57 @@ rules:
   - DOMAIN-SUFFIX,local,DIRECT
   - DOMAIN-SUFFIX,localhost,DIRECT
   - DOMAIN,localhost,DIRECT
+  - IP-CIDR,0.0.0.0/8,DIRECT,no-resolve
   - IP-CIDR,127.0.0.0/8,DIRECT,no-resolve
-  - IP-CIDR,172.16.0.0/12,DIRECT,no-resolve
-  - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve
   - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
   - IP-CIDR,17.0.0.0/8,DIRECT,no-resolve
   - IP-CIDR,100.64.0.0/10,DIRECT,no-resolve
+  - IP-CIDR,127.0.0.0/8,DIRECT,no-resolve
+  - IP-CIDR,127.0.0.0/8,DIRECT,no-resolve
+  - IP-CIDR,169.254.0.0/16,DIRECT,no-resolve
+  - IP-CIDR,172.16.0.0/12,DIRECT,no-resolve
+  - IP-CIDR,192.0.0.0/24,DIRECT,no-resolve
+  - IP-CIDR,192.0.2.0/24,DIRECT,no-resolve
+  - IP-CIDR,192.88.99.0/24,DIRECT,no-resolve
+  - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve
+  - IP-CIDR,198.18.0.0/15,DIRECT,no-resolve
+  - IP-CIDR,198.51.100.0/24,DIRECT,no-resolve
+  - IP-CIDR,203.0.113.0/24,DIRECT,no-resolve
+  - IP-CIDR,224.0.0.0/3,DIRECT,no-resolve
+  - IP-CIDR6,::1/128,DIRECT,no-resolve
+  - IP-CIDR6,fc00::/7,DIRECT,no-resolve
   - IP-CIDR6,fe80::/10,DIRECT,no-resolve
   - MATCH,Proxy
+hosts:
+  $DOMAIN_NAME: $local_addr
+  dns.google: 8.8.8.8
+  dns-unfiltered.adguard.com: 94.140.14.140
+  sandbox.opendns.com: 208.67.222.2
+  dns10.quad9.net: 9.9.9.10
+  security-filter-dns.cleanbrowsing.org: 185.228.168.9
 dns:
   enable: true
-  listen: :53
+  listen: 0.0.0.0:53
   enhanced-mode: fake-ip
-  fake-ip-range: 198.18.0.1/16
+  use-hosts: true
   nameserver:
-    - tls://1.1.1.1:853
-    - tls://dns.google
-    - https://1.1.1.1/dns-query
+      # https://github.com/curl/curl/wiki/DNS-over-HTTPS
+      # https://en.wikipedia.org/wiki/Public_recursive_name_server
+      - https://1.1.1.1/dns-query
+      - https://1.0.0.1/dns-query
+      - https://dns.google
+      - https://dns-unfiltered.adguard.com/dns-query
+      - https://sandbox.opendns.com/dns-query
+      - https://dns10.quad9.net/dns-query
+      - https://security-filter-dns.cleanbrowsing.org/dns-query
+      - https://${DOMAIN_NAME}${DOH_PATH}
+  fallback-filter:
+      geoip: false
+  fake-ip-filter:
+      # Microsoft Network Connectivity Status Indicator (NCSI)
+      - "dns.msftncsi.com"
+      - "www.msftncsi.com"
+      - "www.msftconnecttest.com"
 EOF
 
   readonly CONFIG_USERNAME=clash
@@ -207,8 +249,10 @@ EOF
 
   cat > .env <<EOF
 DOMAIN_NAME=$DOMAIN_NAME
+DOH_PATH=$DOH_PATH
 USERNAME=$CONFIG_USERNAME
 FILENAME=$CONFIG_FILENAME
+EXPIRE=$DISCONTINUATION_DATE
 PASSWD_BCRYPTED=$CONFIG_PASSWORD_BCRYPTED
 EOF
 	green "Starting docker containers..."
@@ -218,7 +262,7 @@ EOF
   blue "USER: $CONFIG_USERNAME"
   blue "PASSWD: ${CONFIG_PASSWORD}"
   blue "TROJAN PASSWD: ${TROJAN_PASSWORD}"
-  blue "Config files is available at https://$CONFIG_USERNAME:${CONFIG_PASSWORD}@${DOMAIN_NAME}/config/clash.yml"
+  blue "Config files are available at https://$CONFIG_USERNAME:${CONFIG_PASSWORD}@${DOMAIN_NAME}/config/clash.yml"
   green "======================="
 }
 
