@@ -185,32 +185,33 @@ proxy-groups:
       - "$PROFILE_NAME"
     url: http://www.gstatic.com/generate_204
     interval: "3600"
+  - name: Microsoft Network Connectivity Status Indicator (NCSI)
+    type: select
+    proxies:
+      - "$PROFILE_NAME"
+      - DIRECT
 rules:
-  - DOMAIN-SUFFIX,local,DIRECT
-  - DOMAIN-SUFFIX,localhost,DIRECT
   - DOMAIN,localhost,DIRECT
+  - DOMAIN,dns.msftncsi.com,Microsoft Network Connectivity Status Indicator (NCSI)
+  - DOMAIN,www.msftncsi.com,Microsoft Network Connectivity Status Indicator (NCSI)
+  - DOMAIN,www.msftconnecttest.com,Microsoft Network Connectivity Status Indicator (NCSI)
   - IP-CIDR,0.0.0.0/8,DIRECT,no-resolve
-  - IP-CIDR,127.0.0.0/8,DIRECT,no-resolve
   - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
-  - IP-CIDR,17.0.0.0/8,DIRECT,no-resolve
   - IP-CIDR,100.64.0.0/10,DIRECT,no-resolve
-  - IP-CIDR,127.0.0.0/8,DIRECT,no-resolve
   - IP-CIDR,127.0.0.0/8,DIRECT,no-resolve
   - IP-CIDR,169.254.0.0/16,DIRECT,no-resolve
   - IP-CIDR,172.16.0.0/12,DIRECT,no-resolve
   - IP-CIDR,192.0.0.0/24,DIRECT,no-resolve
-  - IP-CIDR,192.0.2.0/24,DIRECT,no-resolve
-  - IP-CIDR,192.88.99.0/24,DIRECT,no-resolve
   - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve
   - IP-CIDR,198.18.0.0/15,DIRECT,no-resolve
-  - IP-CIDR,198.51.100.0/24,DIRECT,no-resolve
-  - IP-CIDR,203.0.113.0/24,DIRECT,no-resolve
   - IP-CIDR,224.0.0.0/3,DIRECT,no-resolve
   - IP-CIDR6,::1/128,DIRECT,no-resolve
   - IP-CIDR6,fc00::/7,DIRECT,no-resolve
   - IP-CIDR6,fe80::/10,DIRECT,no-resolve
   - MATCH,Proxy
 hosts:
+  # https://github.com/curl/curl/wiki/DNS-over-HTTPS
+  # https://en.wikipedia.org/wiki/Public_recursive_name_server
   $DOMAIN_NAME: $local_addr
   dns.google: 8.8.8.8
   dns-unfiltered.adguard.com: 94.140.14.140
@@ -223,23 +224,11 @@ dns:
   enhanced-mode: fake-ip
   use-hosts: true
   nameserver:
-      # https://github.com/curl/curl/wiki/DNS-over-HTTPS
-      # https://en.wikipedia.org/wiki/Public_recursive_name_server
-      - https://1.1.1.1/dns-query
-      - https://1.0.0.1/dns-query
-      - https://dns.google
-      - https://dns-unfiltered.adguard.com/dns-query
-      - https://sandbox.opendns.com/dns-query
-      - https://dns10.quad9.net/dns-query
-      - https://security-filter-dns.cleanbrowsing.org/dns-query
-      - https://${DOMAIN_NAME}${DOH_PATH}
+    - https://dns10.quad9.net/dns-query
+    - https://sandbox.opendns.com/dns-query
+    - https://${DOMAIN_NAME}${DOH_PATH}
   fallback-filter:
-      geoip: false
-  fake-ip-filter:
-      # Microsoft Network Connectivity Status Indicator (NCSI)
-      - "dns.msftncsi.com"
-      - "www.msftncsi.com"
-      - "www.msftconnecttest.com"
+    geoip: false
 EOF
 
   readonly CONFIG_USERNAME=clash
