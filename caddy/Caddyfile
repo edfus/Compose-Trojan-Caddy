@@ -35,7 +35,7 @@ http://:4433 {
 			}
 
 			header @clashrequests {
-				Content-Disposition "filename={$FILENAME:Config}"
+				Content-Disposition "attachment; filename={$FILENAME:Config}"
 				Content-Type application/x-yaml
 				Profile-Update-Interval 12
 				Subscription-Userinfo "expire={$EXPIRE:2274253409}"

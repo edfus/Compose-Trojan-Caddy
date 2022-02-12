@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# Adapted from https://github.com/FaithPatrick/trojan-caddy-docker-compose/blob/master/install_beta.sh
+
 # set -e
 
 blue () {
@@ -185,16 +187,27 @@ proxy-groups:
       - "$PROFILE_NAME"
     url: http://www.gstatic.com/generate_204
     interval: "3600"
-  - name: Microsoft Network Connectivity Status Indicator (NCSI)
+  - name: Quick UDP Internet Connections
+    type: select
+    proxies:
+      - REJECT
+      - Proxy
+  - name: Microsoft Network Connectivity Status Indicator
     type: select
     proxies:
       - "$PROFILE_NAME"
       - DIRECT
+script:
+  shortcuts:
+    QUIC: network == 'udp' and dst_port == 443
+
 rules:
+  - SCRIPT,QUIC,Quick UDP Internet Connections
   - DOMAIN,localhost,DIRECT
-  - DOMAIN,dns.msftncsi.com,Microsoft Network Connectivity Status Indicator (NCSI)
-  - DOMAIN,www.msftncsi.com,Microsoft Network Connectivity Status Indicator (NCSI)
-  - DOMAIN,www.msftconnecttest.com,Microsoft Network Connectivity Status Indicator (NCSI)
+  - DOMAIN-SUFFIX,local,DIRECT
+  - DOMAIN,dns.msftncsi.com,Microsoft Network Connectivity Status Indicator
+  - DOMAIN,www.msftncsi.com,Microsoft Network Connectivity Status Indicator
+  - DOMAIN,www.msftconnecttest.com,Microsoft Network Connectivity Status Indicator
   - IP-CIDR,0.0.0.0/8,DIRECT,no-resolve
   - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
   - IP-CIDR,100.64.0.0/10,DIRECT,no-resolve
