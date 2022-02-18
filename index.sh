@@ -226,19 +226,17 @@ hosts:
   # https://github.com/curl/curl/wiki/DNS-over-HTTPS
   # https://en.wikipedia.org/wiki/Public_recursive_name_server
   $DOMAIN_NAME: $local_addr
-  dns.google: 8.8.8.8
-  dns-unfiltered.adguard.com: 94.140.14.140
-  sandbox.opendns.com: 208.67.222.2
-  dns10.quad9.net: 9.9.9.10
-  security-filter-dns.cleanbrowsing.org: 185.228.168.9
+  # dns.google: 8.8.8.8
+  # dns-unfiltered.adguard.com: 94.140.14.140
+  # sandbox.opendns.com: 208.67.222.2
+  # dns10.quad9.net: 9.9.9.10
+  # security-filter-dns.cleanbrowsing.org: 185.228.168.9
 dns:
   enable: true
   listen: 0.0.0.0:53
   enhanced-mode: fake-ip
   use-hosts: true
   nameserver:
-    - https://dns10.quad9.net/dns-query
-    - https://sandbox.opendns.com/dns-query
     - https://${DOMAIN_NAME}${DOH_PATH}
   fallback-filter:
     geoip: false
@@ -264,7 +262,7 @@ EOF
   blue "USER: $CONFIG_USERNAME"
   blue "PASSWD: ${CONFIG_PASSWORD}"
   blue "TROJAN PASSWD: ${TROJAN_PASSWORD}"
-  blue "Config files are available at https://$CONFIG_USERNAME:${CONFIG_PASSWORD}@${DOMAIN_NAME}/config/clash.yml"
+  blue "Config files are available at https://$CONFIG_USERNAME:${CONFIG_PASSWORD}@${DOMAIN_NAME}/.config/clash.yml"
   green "======================="
 }
 

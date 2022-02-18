@@ -40,7 +40,7 @@ services:
         max-size: "10m"
         max-file: "3"
     volumes:
-      - ./caddy/config:/var/www/${DOMAIN_NAME:-localhost}/config:ro
+      - ./caddy/config:/var/www/${DOMAIN_NAME:-localhost}/.config:ro
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - ./ssl:/data/caddy/certificates/acme-v02.api.letsencrypt.org-directory
       - caddy_data:/data       # named volume
