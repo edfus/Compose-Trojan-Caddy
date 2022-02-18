@@ -21,7 +21,7 @@ services:
         max-file: "3"
 
   caddy:
-    image: caddy/caddy:2.4.6-alpine
+    image: caddy/caddy:2.4.0-alpine
     ports:
       - "80:80"
     expose:

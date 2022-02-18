@@ -35,7 +35,7 @@ services:
         max-file: "3"
 
   caddy:
-    image: lucaslorentz/caddy-docker-proxy:2.4-alpine
+    image: lucaslorentz/caddy-docker-proxy:2.4.0-alpine
     ports:
       - "80:80"
     expose:
@@ -83,6 +83,7 @@ services:
 
 networks:
   caddy:
+    external: true
 
 volumes:
   caddy_data:

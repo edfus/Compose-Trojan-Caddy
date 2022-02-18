@@ -45,7 +45,15 @@ elif cat /proc/version | grep -Eqi "centos|red hat|redhat"; then
 fi
 
 function up () {
+  set +e
+  docker-compose -p "trojan-caddy" down
+  docker-compose -p "caddy-archivebox" down
   docker-compose down
+
+  # https://stackoverflow.com/a/30969768
+  set -o allexport
+  [ -f .env ] && source .env
+  set +o allexport
 
   port80=`netstat -tlpn | awk -F '[: ]+' '$1=="tcp"{print $5}' | grep -w 80`
   port443=`netstat -tlpn | awk -F '[: ]+' '$1=="tcp"{print $5}' | grep -w 443`
@@ -82,7 +90,7 @@ function up () {
       exit
   fi
 
-  read -p "$(blue 'Enter the domain name: ')" DOMAIN_NAME
+  read -e -i "$DOMAIN_NAME" -p "$(blue 'Enter the domain name: ')" DOMAIN_NAME
 
   green "Checking for possible DNS resolution failures..."
   real_addr=`ping ${DOMAIN_NAME} -c 1 2> /dev/null | sed '1{s/[^(]*(//;s/).*//;q}'`
@@ -92,6 +100,7 @@ function up () {
     red "================================"
     red "$real_addr != $local_addr"
     red "================================"
+    return 1
   fi
 
   green "Generating a good random password..."
@@ -144,16 +153,17 @@ function up () {
     }
 }
 EOF
-  read -e -i "$DOMAIN_NAME" -p "$(blue 'Enter the profile name: ')" PROFILE_NAME
-  read -e -i "$(date "+%m/%d/%Y" -d "3 months")" -p "$(blue 'Any determined expiration date? [%m/%d/%Y] ')" DISCONTINUATION_DATE 
+  read -e -i "${PROFILE_NAME:-$DOMAIN_NAME}" -p "$(blue 'Enter the profile name: ')" PROFILE_NAME
   set +e
+  EXPIRE_TIMESTAMP="${EXPIRE:+@$EXPIRE}"
+  read -e -i "$(date "+%m/%d/%Y" -d "${EXPIRE_TIMESTAMP:-3 months}")" -p "$(blue 'Any determined expiration date? [%m/%d/%Y] ')" DISCONTINUATION_DATE 
   date -d "${DISCONTINUATION_DATE:-??}" "+%m/%d/%Y" >/dev/null 2>&1
   if [ $? != 0 ]; then
     DISCONTINUATION_DATE=$(date "+%m/%d/%Y" -d "2 years")
   fi
   DISCONTINUATION_DATE=$(date "+%s" -d "$DISCONTINUATION_DATE")
   
-  read -e -i "/$(cat /dev/urandom | head -c 4 | hexdump -e '"%x"')" -p "$(blue 'Enter the DoH URI path: ')" DOH_PATH 
+  read -e -i "${DOH_PATH:-/$(cat /dev/urandom | head -c 4 | hexdump -e '"%x"')}" -p "$(blue 'Enter the DoH URI path: ')" DOH_PATH 
   DOH_PATH="$(echo "$DOH_PATH" | sed -r 's/^\/*([^\/])/\/\1/')"
 
   mkdir -p ./caddy/config
@@ -245,20 +255,83 @@ EOF
   readonly CONFIG_USERNAME=clash
   readonly CONFIG_FILENAME="$PROFILE_NAME $local_addr"
   readonly CONFIG_PASSWORD=$(uuidgen)
-  readonly CONFIG_PASSWORD_BCRYPTED=$(docker run caddy/caddy:alpine caddy hash-password --plaintext "$CONFIG_PASSWORD")
+  readonly CONFIG_PASSWORD_BCRYPTED=$(docker run caddy/caddy:2.4.0-alpine caddy hash-password -algorithm "bcrypt" -plaintext "$CONFIG_PASSWORD")
 
   cat > .env <<EOF
 DOMAIN_NAME=$DOMAIN_NAME
 DOH_PATH=$DOH_PATH
 USERNAME=$CONFIG_USERNAME
-FILENAME=$CONFIG_FILENAME
+PROFILE_NAME="$PROFILE_NAME"
+FILENAME="$CONFIG_FILENAME"
 EXPIRE=$DISCONTINUATION_DATE
 PASSWD_BCRYPTED=$CONFIG_PASSWORD_BCRYPTED
 EOF
-	green "Starting docker containers..."
-	docker-compose --env-file .env up -d --build
-	
-	green "======================="
+
+  set -o allexport
+  source .env
+  set +o allexport
+
+  if [ -f "./docker-proxy.yml" ]; then 
+    read -p "$(blue 'Set up an Archive Box decoy site? (Y/n) ')" yn
+    [ -z "${yn}" ] && yn="n"
+    if [[ $yn == [Yy] ]]; then
+      test -f "./docker-compose.yml" && mv "./docker-compose.yml" "./docker-compose.yml.bak"
+      cp "./docker-proxy.yml" "./docker-compose.yml"
+      green "Starting docker containers..."
+      set +e
+      docker network create caddy
+      docker-compose -p "trojan-caddy" --env-file .env up -d --build
+      read -p "$(blue 'Any URL for scheduled regular imports? ')" VAR_ARCHIVE_TARGET
+cat>./archivebox.yml<<EOF
+version: '3.9'
+services:
+  archivebox:
+    image: archivebox/archivebox:sha-bf432d4
+    command: server --quick-init 0.0.0.0:8000
+    expose:
+      - 8000
+    environment:
+      - ALLOWED_HOSTS=*
+      - MEDIA_MAX_SIZE=750m
+    volumes:
+      - ./archivebox-data:/data
+    networks:
+      - caddy
+    labels:
+      caddy: "http://:4433"
+      # https://github.com/lucaslorentz/caddy-docker-proxy/issues/208#issuecomment-762333788
+      caddy.reverse_proxy: http://archivebox:8000
+  scheduler:
+    image: archivebox/archivebox:sha-bf432d4
+    command: schedule --foreground --every=month --depth=0 '${VAR_ARCHIVE_TARGET:-https://en.wikipedia.org/wiki/Category:Shades_of_blue}'
+    environment:
+      - USE_COLOR=True
+      - SHOW_PROGRESS=False
+    networks:
+      - caddy
+    volumes:
+      - ./archivebox-data:/data
+networks:
+  caddy:
+    external: true
+EOF
+      docker-compose -p "caddy-archivebox" -f ./archivebox.yml --env-file /dev/null run archivebox init --setup
+      docker-compose -p "caddy-archivebox" -f ./archivebox.yml --env-file /dev/null up -d
+      
+      green "======================="
+      blue "USER: $CONFIG_USERNAME"
+      blue "PASSWD: ${CONFIG_PASSWORD}"
+      blue "TROJAN PASSWD: ${TROJAN_PASSWORD}"
+      blue "Config files are available at https://$CONFIG_USERNAME:${CONFIG_PASSWORD}@${DOMAIN_NAME}/.config/clash.yml"
+      green "======================="
+      return
+    fi
+  fi
+
+  green "Starting docker containers..."
+  docker-compose --env-file .env up -d --build
+  
+  green "======================="
   blue "USER: $CONFIG_USERNAME"
   blue "PASSWD: ${CONFIG_PASSWORD}"
   blue "TROJAN PASSWD: ${TROJAN_PASSWORD}"
