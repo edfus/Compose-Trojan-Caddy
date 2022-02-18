@@ -1,0 +1,89 @@
+version: '3.9'
+
+services:
+  trojan:
+    image: trojangfw/trojan:latest
+    ports:
+      - "443:443"
+    volumes:
+      - ./trojan/config:/config
+      - ./ssl:/ssl
+      - ./trojan/wait_for_caddy.sh:/wait_for_caddy.sh
+    working_dir: /config
+    labels:
+      - caddy=http://:4433
+      - caddy.0_redir=/.config /.config/
+      - caddy.1_route=/.config/*
+      - caddy.1_route.0_basicauth=bcrypt
+      - caddy.1_route.0_basicauth.${USERNAME}="${PASSWD_BCRYPTED}"
+      - caddy.1_route.@clashrequests.file.try_policy=first_exist
+      - caddy.1_route.@clashrequests.file.root="/var/www/${DOMAIN_NAME:-localhost}"
+      - caddy.1_route.@clashrequests.header_regexp=ua User-Agent "(?i)^clash.+"
+      - caddy.1_route.1_header="@clashrequests"
+      - caddy.1_route.1_header.Content-Disposition="attachment; filename=${FILENAME:-Config}"
+      - caddy.1_route.1_header.Content-Type=application/x-yaml
+      - caddy.1_route.1_header.Profile-Update-Interval=12
+      - caddy.1_route.1_header.Subscription-Userinfo="expire=${EXPIRE:-2274253409}"
+      - caddy.1_route.2_file_server.root="/var/www/${DOMAIN_NAME:-localhost}"
+      - caddy.1_route.2_file_server.browse=
+    command: ["sh", "/wait_for_caddy.sh", "trojan", "config.json"]
+    networks:
+      - caddy
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  caddy:
+    image: lucaslorentz/caddy-docker-proxy:2.4-alpine
+    ports:
+      - "80:80"
+    expose:
+      - 4433
+    environment:
+      - CADDY_INGRESS_NETWORKS=caddy
+    networks:
+      - caddy
+    labels:
+      caddy_0.servers.protocol.allow_h2c: 
+      caddy_0.log.output: stdout
+      caddy_0.log.format: filter
+      caddy_0.log.format.wrap: json
+      caddy_0.log.format.fields.request>headers>Authorization: delete
+      caddy_0.log.format.fields.common_log: delete
+      caddy_1: ${DOMAIN_NAME:-localhost}
+      caddy_1.tls.issuer: acme
+      caddy_1.tls.issuer.disable_tlsalpn_challenge: 
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./caddy/config:/var/www/${DOMAIN_NAME:-localhost}/.config:ro
+      - ./ssl:/data/caddy/certificates/acme-v02.api.letsencrypt.org-directory
+      - caddy_data:/data       # named volume
+      - caddy_config:/config   # named volume
+  doh:
+    image: satishweb/doh-server:alpine
+    expose:
+      - 8053
+    labels:
+      caddy: "http://:4433"
+      caddy.reverse_proxy: "${DOH_PATH:-/dns-query}* http://doh:8053"
+    environment:
+      UPSTREAM_DNS_SERVER: "udp:8.8.8.8:53"
+      DOH_HTTP_PREFIX: "${DOH_PATH}"
+      DOH_SERVER_LISTEN: ":8053"
+      DOH_SERVER_TIMEOUT: "10"
+      DOH_SERVER_TRIES: "3"
+      DOH_SERVER_VERBOSE: "false"
+    networks:
+      - caddy
+
+networks:
+  caddy:
+
+volumes:
+  caddy_data:
+  caddy_config:
