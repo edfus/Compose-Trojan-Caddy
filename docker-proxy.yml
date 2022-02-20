@@ -18,7 +18,7 @@ services:
       - caddy.1_route.0_basicauth.${USERNAME}="${PASSWD_BCRYPTED}"
       - caddy.1_route.@clashrequests.file.try_policy=first_exist
       - caddy.1_route.@clashrequests.file.root="/var/www/${DOMAIN_NAME:-localhost}"
-      - caddy.1_route.@clashrequests.header_regexp=ua User-Agent "(?i)^clash.+"
+      - caddy.1_route.@clashrequests.header_regexp=ua User-Agent "(?i)^clash"
       - caddy.1_route.1_header="@clashrequests"
       - caddy.1_route.1_header.Content-Disposition="attachment; filename=${FILENAME:-Config}"
       - caddy.1_route.1_header.Content-Type=application/x-yaml

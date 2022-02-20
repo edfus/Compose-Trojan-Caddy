@@ -48,9 +48,9 @@ fi
 
 function up () {
   set +e
-  docker-compose -p "trojan-caddy" down
-  docker-compose -p "caddy-archivebox" down
-  docker-compose down
+  # docker-compose -p "trojan-caddy" down
+  # docker-compose -p "caddy-archivebox" down
+  # docker-compose down
 
   # https://stackoverflow.com/a/30969768
   set -o allexport
@@ -257,7 +257,7 @@ EOF
 
   readonly CONFIG_USERNAME=clash
   readonly CONFIG_FILENAME="$PROFILE_NAME $local_addr"
-  readonly CONFIG_PASSWORD=$(urandom 6)
+  readonly CONFIG_PASSWORD="${PASSWORD:-$(urandom 6)}"
   readonly CONFIG_PASSWORD_BCRYPTED=$(docker run caddy/caddy:2.4.0-alpine caddy hash-password -algorithm "bcrypt" -plaintext "$CONFIG_PASSWORD")
 
   cat > .env <<EOF
@@ -267,6 +267,7 @@ USERNAME=$CONFIG_USERNAME
 PROFILE_NAME="$PROFILE_NAME"
 FILENAME="$CONFIG_FILENAME"
 EXPIRE=$DISCONTINUATION_DATE
+PASSWORD=$CONFIG_PASSWORD
 PASSWD_BCRYPTED=$CONFIG_PASSWORD_BCRYPTED
 EOF
 
@@ -283,7 +284,7 @@ EOF
       green "Starting docker containers..."
       set +e
       docker network create caddy
-      docker-compose -p "trojan-caddy" --env-file .env up -d --build
+      docker-compose -p "trojan-caddy" --env-file .env up -d
       read -p "$(blue 'Any URL for scheduled regular imports? ')" VAR_ARCHIVE_TARGET
 cat>./archivebox.yml<<EOF
 version: '3.9'
@@ -332,7 +333,7 @@ EOF
   fi
 
   green "Starting docker containers..."
-  docker-compose --env-file .env up -d --build
+  docker-compose --env-file .env up -d
   
   green "======================="
   blue "USER: $CONFIG_USERNAME"
@@ -386,6 +387,10 @@ function consolidate () {
   COMPOSE_FILE="./$REPOSITORY/docker-compose.yml"
   ENV_FILE="./$REPOSITORY/.env"
 
+  set -o allexport
+  test -f "$ENV_FILE" && source "$ENV_FILE"
+  set +o allexport
+
   cat>"$COMPOSE_FILE"<<'EOF'
 version: '3.9'
 services:
@@ -396,6 +401,7 @@ services:
     build: .
     environment:
       NODE_ENV: production
+      EXPIRE: ${EXPIRE}
     networks:
       - caddy
     logging:
@@ -463,8 +469,8 @@ EOF
     fi
   fi
 
-  readonly CONFIG_USERNAME=$(urandom 2)
-  readonly CONFIG_PASSWORD=$(urandom 4)
+  readonly CONFIG_USERNAME=${USERNAME:-$(urandom 2)}
+  readonly CONFIG_PASSWORD=${PASSWORD:-$(urandom 4)}
   readonly CONFIG_PASSWORD_BCRYPTED=$(docker run caddy/caddy:2.4.0-alpine caddy hash-password -algorithm "bcrypt" -plaintext "$CONFIG_PASSWORD")
 
   cat > "$ENV_FILE" <<EOF
@@ -475,6 +481,7 @@ WRANGLER_CONFIG=${WRANGLER_CONFIG:+$(readlink -f "$WRANGLER_CONFIG")}
 USERNAME="$CONFIG_USERNAME"
 PASSWORD="$CONFIG_PASSWORD"
 PASSWD_BCRYPTED=$CONFIG_PASSWORD_BCRYPTED
+EXPIRE=${EXPIRE:-$DISCONTINUATION_DATE}
 EOF
 
   set -o allexport
