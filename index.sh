@@ -1,7 +1,5 @@
 #!/bin/bash
 
-# Adapted from https://github.com/FaithPatrick/trojan-caddy-docker-compose/blob/master/install_beta.sh
-
 # set -e
 
 blue () {
@@ -12,6 +10,10 @@ green () {
 }
 red () {
     echo -e "\033[31m\033[01m$1\033[0m"
+}
+
+urandom () {
+  cat /dev/urandom | head -c $1 | hexdump -e '"%x"'
 }
 
 if [[ -f /etc/redhat-release ]]; then
@@ -73,6 +75,7 @@ function up () {
       exit 1
   fi
 
+  # https://github.com/FaithPatrick/trojan-caddy-docker-compose/blob/master/install_beta.sh
   CHECK=$(grep SELINUX= /etc/selinux/config | grep -v "#")
   if [ "$CHECK" == "SELINUX=enforcing" ] || [ "$CHECK" == "SELINUX=permissive" ]; then
       red "======================================================================="
@@ -104,7 +107,7 @@ function up () {
   fi
 
   green "Generating a good random password..."
-  readonly TROJAN_PASSWORD="$(uuidgen)-2022-v1.0"
+  readonly TROJAN_PASSWORD="$(urandom 10)"
 
   green "Intalling packages..."
 
@@ -163,7 +166,7 @@ EOF
   fi
   DISCONTINUATION_DATE=$(date "+%s" -d "$DISCONTINUATION_DATE")
   
-  read -e -i "${DOH_PATH:-/$(cat /dev/urandom | head -c 4 | hexdump -e '"%x"')}" -p "$(blue 'Enter the DoH URI path: ')" DOH_PATH 
+  read -e -i "${DOH_PATH:-/$(urandom 4)}" -p "$(blue 'Enter the DoH URI path: ')" DOH_PATH 
   DOH_PATH="$(echo "$DOH_PATH" | sed -r 's/^\/*([^\/])/\/\1/')"
 
   mkdir -p ./caddy/config
@@ -254,7 +257,7 @@ EOF
 
   readonly CONFIG_USERNAME=clash
   readonly CONFIG_FILENAME="$PROFILE_NAME $local_addr"
-  readonly CONFIG_PASSWORD=$(uuidgen)
+  readonly CONFIG_PASSWORD=$(urandom 6)
   readonly CONFIG_PASSWORD_BCRYPTED=$(docker run caddy/caddy:2.4.0-alpine caddy hash-password -algorithm "bcrypt" -plaintext "$CONFIG_PASSWORD")
 
   cat > .env <<EOF
@@ -353,7 +356,7 @@ function install_docker_compose () {
   set +e
   docker-compose -v >/dev/null 2>&1
   if [ $? != 0 ]; then
-    $systemPackage -y install  python-pip
+    $systemPackage -y install python-pip
     pip install --upgrade pip
     pip install docker-compose
 
@@ -365,4 +368,196 @@ function install_docker_compose () {
   fi
 }
 
-up
+function consolidate () {
+  $systemPackage -y install git
+  set -e
+  REPOSITORY=consolidate-clash-profiles
+  if [ -d "$REPOSITORY" ]; then
+    CWD=$PWD
+    cd "$REPOSITORY"
+    set +e
+    git fetch --all
+    git reset --hard origin/master
+    set -e
+    cd "$CWD"
+  else
+    git clone --depth 1 https://github.com/edfus/"$REPOSITORY"
+  fi
+  COMPOSE_FILE="./$REPOSITORY/docker-compose.yml"
+  ENV_FILE="./$REPOSITORY/.env"
+
+  cat>"$COMPOSE_FILE"<<'EOF'
+version: '3.9'
+services:
+  clash-profiles:
+    expose:
+      - "80"
+    restart: unless-stopped
+    build: .
+    environment:
+      NODE_ENV: production
+    networks:
+      - caddy
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+    volumes:
+      - rulesets:/app/external-rulesets
+      - ${PROFILES_OUTPUT:-./profiles}:/app/output
+      - ${PROFILES_SRC:-./profiles.js}:/app/profiles.js
+      - ${INJECTIONS_SRC:-./injections.yml}:/app/injections.yml
+      - ${WRANGLER_CONFIG:-./wrangler.toml}:/app/wrangler.toml
+    labels:
+      - caddy=http://:4433
+      - caddy.1_route=/.profiles
+      - caddy.1_route.0_basicauth=bcrypt
+      - caddy.1_route.0_basicauth.${USERNAME}="${PASSWD_BCRYPTED}"
+      - caddy.1_route.reverse_proxy=http://clash-profiles:80
+networks:
+  caddy:
+    external: true
+volumes:
+  rulesets:
+EOF
+
+  set +e
+  if [ "$PROFILES_SRC" == "" ]; then
+    if ! [ -f profiles.js ]; then
+      cat>profiles.js<<EOF
+export default [
+
+]
+EOF
+    fi
+    nano profiles.js
+    PROFILES_SRC=profiles.js
+  fi
+
+  if [ "$INJECTIONS_SRC" == "" ]; then
+    if ! [ -f injections.yml ]; then
+      cat>injections.yml<<EOF
+Microsoft Network Connectivity Status Indicator:
+  payload:
+    - DOMAIN,dns.msftncsi.com,Microsoft Network Connectivity Status Indicator
+    - DOMAIN,www.msftncsi.com,Microsoft Network Connectivity Status Indicator
+    - DOMAIN,www.msftconnecttest.com,Microsoft Network Connectivity Status Indicator
+
+EOF
+    fi
+    nano injections.yml
+    INJECTIONS_SRC=injections.yml
+  fi
+
+  if [ "$WRANGLER_CONFIG" == "" ]; then
+    if [ -f wrangler.toml ]; then
+      WRANGLER_CONFIG=wrangler.toml
+    elif [ -f "$REPOSITORY/wrangler.toml" ]; then
+      WRANGLER_CONFIG="$REPOSITORY/wrangler.toml"
+    else
+      # docker-compose -f "$COMPOSE_FILE" --env-file /dev/null run clash-profiles ./init-wrangler.sh
+      chmod +x "./$REPOSITORY/init-wrangler.sh"
+      "./$REPOSITORY/init-wrangler.sh"
+      WRANGLER_CONFIG="./$REPOSITORY/wrangler.toml"
+      # docker-compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" run clash-profiles wrangler config
+    fi
+  fi
+
+  readonly CONFIG_USERNAME=$(urandom 2)
+  readonly CONFIG_PASSWORD=$(urandom 4)
+  readonly CONFIG_PASSWORD_BCRYPTED=$(docker run caddy/caddy:2.4.0-alpine caddy hash-password -algorithm "bcrypt" -plaintext "$CONFIG_PASSWORD")
+
+  cat > "$ENV_FILE" <<EOF
+PROFILES_OUTPUT=${PROFILES_OUTPUT:+$(readlink -f "$PROFILES_OUTPUT")}
+PROFILES_SRC=$(readlink -f "$PROFILES_SRC")
+INJECTIONS_SRC=$(readlink -f "$INJECTIONS_SRC")
+WRANGLER_CONFIG=${WRANGLER_CONFIG:+$(readlink -f "$WRANGLER_CONFIG")}
+USERNAME="$CONFIG_USERNAME"
+PASSWORD="$CONFIG_PASSWORD"
+PASSWD_BCRYPTED=$CONFIG_PASSWORD_BCRYPTED
+EOF
+
+  set -o allexport
+  test -f .env &&  source .env
+  source "$ENV_FILE"
+  set +o allexport
+
+  docker network create caddy
+  docker-compose -p "$REPOSITORY" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d
+  
+  if [ "$DOMAIN_NAME" == "" ]; then
+    read -e -i "$DOMAIN_NAME" -p "$(blue 'Enter the domain name: ')" DOMAIN_NAME
+  fi
+
+  green "======================="
+  blue "USER: $CONFIG_USERNAME"
+  blue "PASSWD: ${CONFIG_PASSWORD}"
+  blue "Config files are available at https://$CONFIG_USERNAME:${CONFIG_PASSWORD}@${DOMAIN_NAME}/.profiles?code=vanilla"
+  green "======================="
+
+  docker exec -it $(docker ps | grep clash | awk '{ print $1 }') wrangler config
+  docker logs $(docker ps | grep clash | awk '{ print $1 }') --follow
+}
+
+if [[ $# -eq 0 ]]; then
+  up
+  exit
+fi
+
+# https://stackoverflow.com/a/14203146/13910382
+POSITIONAL_ARGS=()
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -c|--consolidate)
+      CONSOLIDATE=YES
+      shift # past argument
+      ;;
+    -u|--up)
+      UP=YES
+      shift # past argument
+      ;;
+    -i|--injections)
+      INJECTIONS_SRC="$2"
+      shift # past argument
+      shift # past value
+      ;;
+    -p|--profiles|--config)
+      PROFILES_SRC="$2"
+      shift # past argument
+      shift # past value
+      ;;
+    -w|--wranger|--wranger-config)
+      WRANGLER_CONFIG="$2"
+      shift # past argument
+      shift # past value
+      ;;
+    -o|--output)
+      PROFILES_OUTPUT="$2"
+      shift # past argument
+      shift # past value
+      ;;
+    -h|--help)
+      sed -n '/POSITIONAL_ARGS=\(\)/,$p' $0
+      exit 0
+      ;;
+    -*|--*)
+      echo "Unknown option $1"
+      exit 1
+      ;;
+    *)
+      POSITIONAL_ARGS+=("$1") # save positional arg
+      shift # past argument
+      ;;
+  esac
+done
+
+set -- "${POSITIONAL_ARGS[@]}" # restore positional parameters
+
+if [ "$UP" == YES ]; then
+  up
+fi
+
+if [ "$CONSOLIDATE" == YES ]; then
+  consolidate
+fi
