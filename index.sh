@@ -64,7 +64,7 @@ function up () {
       red "==========================================================="
       red "Port 80 is already in use by process ${process80}"
       red "==========================================================="
-      exit 1
+      return 1
   fi
 
   if [ -n "$port443" ]; then
@@ -72,7 +72,7 @@ function up () {
       red "============================================================="
       red "Port 443 is already in use by process ${process443}"
       red "============================================================="
-      exit 1
+      return 1
   fi
 
   # https://github.com/FaithPatrick/trojan-caddy-docker-compose/blob/master/install_beta.sh
@@ -285,7 +285,15 @@ EOF
       set +e
       docker network create caddy
       docker-compose -p "trojan-caddy" --env-file .env up -d
-      read -p "$(blue 'Any URL for scheduled regular imports? ')" VAR_ARCHIVE_TARGET
+      read -p "$(blue 'Any URL for scheduled regular imports? ')" yn
+      [ -z "${yn}" ] && yn="n"
+      if [[ $yn == [Nn] ]]; then
+        ENABLE_SCHEDULE=/bin/false
+        VAR_ARCHIVE_TARGET=""
+      else
+        ENABLE_SCHEDULE=
+        VAR_ARCHIVE_TARGET="$yn"
+      fi   
 cat>./archivebox.yml<<EOF
 version: '3.9'
 services:
@@ -307,12 +315,13 @@ services:
       caddy.reverse_proxy: http://archivebox:8000
   scheduler:
     image: archivebox/archivebox:sha-bf432d4
-    command: schedule --foreground --every=month --depth=0 '${VAR_ARCHIVE_TARGET:-https://en.wikipedia.org/wiki/Category:Shades_of_blue}'
+    command: ${ENABLE_SCHEDULE} schedule --foreground --every=month --depth=0 '${VAR_ARCHIVE_TARGET}'
     environment:
       - USE_COLOR=True
       - SHOW_PROGRESS=False
     networks:
       - caddy
+    restart: "no"
     volumes:
       - ./archivebox-data:/data
 networks:
@@ -321,7 +330,8 @@ networks:
 EOF
       docker-compose -p "caddy-archivebox" -f ./archivebox.yml --env-file /dev/null run archivebox init --setup
       docker-compose -p "caddy-archivebox" -f ./archivebox.yml --env-file /dev/null up -d
-      
+      docker exec $(docker ps | grep archivebox-archivebox | awk '{ print $1 }') \
+      archivebox config --set YOUTUBEDL_ARGS='["--write-description", "--write-info-json", "--write-annotations", "--write-thumbnail", "--no-call-home", "--write-sub", "--all-subs", "--write-auto-sub", "--convert-subs=srt", "--yes-playlist", "--continue", "--ignore-errors", "--geo-bypass", "--add-metadata", "--max-filesize=500m", "--sub-lang=en"]'
       green "======================="
       blue "USER: $CONFIG_USERNAME"
       blue "PASSWD: ${CONFIG_PASSWORD}"
@@ -490,7 +500,7 @@ EOF
   set +o allexport
 
   docker network create caddy
-  docker-compose -p "$REPOSITORY" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d
+  docker-compose -p "$REPOSITORY" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d --build
   
   if [ "$DOMAIN_NAME" == "" ]; then
     read -e -i "$DOMAIN_NAME" -p "$(blue 'Enter the domain name: ')" DOMAIN_NAME
@@ -502,8 +512,8 @@ EOF
   blue "Config files are available at https://$CONFIG_USERNAME:${CONFIG_PASSWORD}@${DOMAIN_NAME}/.profiles?code=vanilla"
   green "======================="
 
-  docker exec -it $(docker ps | grep clash | awk '{ print $1 }') wrangler config
-  docker logs $(docker ps | grep clash | awk '{ print $1 }') --follow
+  docker exec -it $(docker ps | grep clash | head -n 1  | awk '{ print $1 }') wrangler config
+  docker logs $(docker ps | grep clash | head -n 1 | awk '{ print $1 }') --follow
 }
 
 if [[ $# -eq 0 ]]; then
