@@ -120,6 +120,7 @@ function up () {
 
   ipv6_disabled=`sysctl net.ipv6.conf.all.disable_ipv6 | sed -r 's/net.ipv6.conf.all.disable_ipv6\s=\s//'`
   ipv6_addr=`curl -6 --silent https://ipv6.icanhazip.com`
+  ipv6_enabled="false"
   network_interface="0.0.0.0"
   if [ $? != 0 ] || [ $ipv6_disabled != 0 ] ; then
     red "IPv6 is not available, falling back on IPv4 only"
@@ -158,6 +159,7 @@ EOF
       done
     fi
     network_interface="::"
+    ipv6_enabled="true"
   fi
 
   green "Creating Trojan config..."
@@ -172,7 +174,7 @@ EOF
     "password": [
         "$TROJAN_PASSWORD"
     ],
-    "log_level": 2,
+    "log_level": 1,
     "ssl": {
         "cert": "/ssl/$DOMAIN_NAME/$DOMAIN_NAME.crt",
         "key": "/ssl/$DOMAIN_NAME/$DOMAIN_NAME.key",
@@ -285,7 +287,7 @@ rules:
 hosts:
   # https://github.com/curl/curl/wiki/DNS-over-HTTPS
   # https://en.wikipedia.org/wiki/Public_recursive_name_server
-  $DOMAIN_NAME: $local_addr
+  $DOMAIN_NAME: $([ "$ipv6_enabled" == "true" ] && echo "\"[$ipv6_addr]\"" || echo $local_addr)
   # dns.google: 8.8.8.8
   # dns-unfiltered.adguard.com: 94.140.14.140
   # sandbox.opendns.com: 208.67.222.2
