@@ -358,6 +358,7 @@ services:
       - ./archivebox-data:/data
     networks:
       - caddy
+    restart: unless-stopped
     labels:
       caddy: "http://:4433"
       # https://github.com/lucaslorentz/caddy-docker-proxy/issues/208#issuecomment-762333788
