@@ -133,13 +133,15 @@ function up () {
     jq -s add <(cat <<EOF
 {
   "ipv6": true,
-  "fixed-cidr-v6": "$ipv6_interface"
+  "fixed-cidr-v6": "$ipv6_interface",
+  "experimental": true,
+  "ip6tables": true
 }
 EOF
 ) /etc/docker/daemon.json | tee /etc/docker/daemon.json
     systemctl reload docker
-    [ "`docker ps -aqf "name=ipv6nat"`" == "" ] \
-    && docker run -d --name ipv6nat --privileged --network host --restart unless-stopped -v /var/run/docker.sock:/var/run/docker.sock:ro -v /lib/modules:/lib/modules:ro robbertkl/ipv6nat
+    # [ "`docker ps -aqf "name=ipv6nat"`" == "" ] \
+    # && docker run -d --name ipv6nat --privileged --network host --restart unless-stopped -v /var/run/docker.sock:/var/run/docker.sock:ro -v /lib/modules:/lib/modules:ro robbertkl/ipv6nat
 
     caddy_backends=`docker ps -qf "network=caddy"`
     caddy_ipv6_enabled=`docker network inspect caddy | jq '.[0].EnableIPv6'`
@@ -148,7 +150,7 @@ EOF
         docker network disconnect -f caddy $backend
       done
       docker network rm caddy
-      docker network create --ipv6 --subnet "fd00:dead:beef::/48" caddy > /dev/null
+      docker network create --ipv6 --subnet "fd00:dead:beef::/48" --gateway "fd00:dead:beef::254" caddy > /dev/null
       for backend in $caddy_backends; do
         docker network connect caddy $backend
       done
@@ -474,7 +476,7 @@ services:
         max-size: "10m"
         max-file: "3"
     volumes:
-      - rulesets:/app/external-rulesets
+      - ./external-rulesets:/app/external-rulesets
       - ${PROFILES_OUTPUT:-./profiles}:/app/output
       - ${PROFILES_SRC:-./profiles.js}:/app/profiles.js
       - ${INJECTIONS_SRC:-./injections.yml}:/app/injections.yml
@@ -488,8 +490,6 @@ services:
 networks:
   caddy:
     external: true
-volumes:
-  rulesets:
 EOF
 
   set +e
@@ -570,7 +570,9 @@ EOF
   blue "Config files are available at https://$CONFIG_USERNAME:${CONFIG_PASSWORD}@${DOMAIN_NAME}/.profiles?code=vanilla"
   green "======================="
 
-  docker exec -it $(docker ps | grep clash | head -n 1  | awk '{ print $1 }') wrangler config
+  wrangler_container=$(docker ps | grep clash | head -n 1  | awk '{ print $1 }')
+  docker exec -it "$wrangler_container" wrangler config
+  docker exec -it "$wrangler_container" wrangler publish
   docker logs $(docker ps | grep clash | head -n 1 | awk '{ print $1 }') --follow
 }
 
