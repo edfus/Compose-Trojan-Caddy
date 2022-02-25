@@ -18,31 +18,31 @@ urandom () {
 
 if [[ -f /etc/redhat-release ]]; then
     release="centos"
-    systemPackage="yum"
+    PKGMANAGER="yum"
     systempwd="/usr/lib/systemd/system/"
 elif cat /etc/issue | grep -Eqi "debian"; then
     release="debian"
-    systemPackage="apt-get"
+    PKGMANAGER="apt-get"
     systempwd="/lib/systemd/system/"
 elif cat /etc/issue | grep -Eqi "ubuntu"; then
     release="ubuntu"
-    systemPackage="apt-get"
+    PKGMANAGER="apt-get"
     systempwd="/lib/systemd/system/"
 elif cat /etc/issue | grep -Eqi "centos|red hat|redhat"; then
     release="centos"
-    systemPackage="yum"
+    PKGMANAGER="yum"
     systempwd="/usr/lib/systemd/system/"
 elif cat /proc/version | grep -Eqi "debian"; then
     release="debian"
-    systemPackage="apt-get"
+    PKGMANAGER="apt-get"
     systempwd="/lib/systemd/system/"
 elif cat /proc/version | grep -Eqi "ubuntu"; then
     release="ubuntu"
-    systemPackage="apt-get"
+    PKGMANAGER="apt-get"
     systempwd="/lib/systemd/system/"
 elif cat /proc/version | grep -Eqi "centos|red hat|redhat"; then
     release="centos"
-    systemPackage="yum"
+    PKGMANAGER="yum"
     systempwd="/usr/lib/systemd/system/"
 fi
 
@@ -64,7 +64,6 @@ function up () {
       red "==========================================================="
       red "Port 80 is already in use by process ${process80}"
       red "==========================================================="
-      return 1
   fi
 
   if [ -n "$port443" ]; then
@@ -72,34 +71,39 @@ function up () {
       red "============================================================="
       red "Port 443 is already in use by process ${process443}"
       red "============================================================="
-      return 1
   fi
 
-  # https://github.com/FaithPatrick/trojan-caddy-docker-compose/blob/master/install_beta.sh
-  CHECK=$(grep SELINUX= /etc/selinux/config | grep -v "#")
-  if [ "$CHECK" == "SELINUX=enforcing" ] || [ "$CHECK" == "SELINUX=permissive" ]; then
-      red "======================================================================="
-      red "SELinux is enabled and may hamper the process of requesting site certificates"
-      red "======================================================================="
-      read -p "Disable SELinux and reboot the machine? [Y/n]:" yn
-    [ -z "${yn}" ] && yn="y"
-    if [[ $yn == [Yy] ]]; then
-        sed -i 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/selinux/config
-        sed -i 's/SELINUX=permissive/SELINUX=disabled/g' /etc/selinux/config
-              setenforce 0
-        echo -e "Rebooting..."
-        reboot
-    fi
-      exit
-  fi
+  # # https://github.com/FaithPatrick/trojan-caddy-docker-compose/blob/master/install_beta.sh
+  # CHECK=$(grep SELINUX= /etc/selinux/config | grep -v "#")
+  # if [ "$CHECK" == "SELINUX=enforcing" ] || [ "$CHECK" == "SELINUX=permissive" ]; then
+  #     red "======================================================================="
+  #     red "SELinux is enabled and may hamper the process of requesting site certificates"
+  #     red "======================================================================="
+  #     read -p "Disable SELinux and reboot the machine? [Y/n]:" yn
+  #   [ -z "${yn}" ] && yn="y"
+  #   if [[ $yn == [Yy] ]]; then
+  #       sed -i 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/selinux/config
+  #       sed -i 's/SELINUX=permissive/SELINUX=disabled/g' /etc/selinux/config
+  #             setenforce 0
+  #       echo -e "Rebooting..."
+  #       reboot
+  #   fi
+  #     exit
+  # fi
 
   read -e -i "$DOMAIN_NAME" -p "$(blue 'Enter the domain name: ')" DOMAIN_NAME
 
   green "Checking for possible DNS resolution failures..."
-  real_addr=`ping ${DOMAIN_NAME} -c 1 2> /dev/null | sed '1{s/[^(]*(//;s/).*//;q}'`
-  local_addr=`curl ipv4.icanhazip.com`
+  real_addr=`dig +short "$DOMAIN_NAME"`
+  dig_rtcode=$?
+  if [ $dig_rtcode != 0 ]; then
+    $PKGMANAGER -y install dnsutils bind-tools
+    real_addr=`dig +short "$DOMAIN_NAME"`
+    $dig_rtcode=$?
+  fi
+  local_addr=`curl -4 --silent ipv4.icanhazip.com`
 
-  if [ "$real_addr" != "$local_addr" ] ; then
+  if [ $dig_rtcode == 0  ] && [ "$real_addr" != "$local_addr" ] ; then
     red "================================"
     red "$real_addr != $local_addr"
     red "================================"
@@ -113,6 +117,43 @@ function up () {
 
   install_docker
   install_docker_compose
+
+  ipv6_disabled=`sysctl net.ipv6.conf.all.disable_ipv6 | sed -r 's/net.ipv6.conf.all.disable_ipv6\s=\s//'`
+  ipv6_addr=`curl -6 --silent https://ipv6.icanhazip.com`
+  if [ $? != 0 ] || [ $ipv6_disabled != 0 ] ; then
+    red "IPv6 is not available, falling back on IPv4 only"
+  else
+    green "Enabling IPv6 support in Docker containers..."
+    ipv6_interface=`ip -6 addr show dev eth0 | awk '/inet6/{print $2}' | grep -v ^::1 | grep -v ^fe80 | head -n 1`
+    jq -h > /dev/null
+    if [ $? != 0 ]; then
+      $PKGMANAGER install -y jq
+    fi
+    test -f /etc/docker/daemon.json || echo '{}' > /etc/docker/daemon.json
+    jq -s add <(cat <<EOF
+{
+  "ipv6": true,
+  "fixed-cidr-v6": "$ipv6_interface"
+}
+EOF
+) /etc/docker/daemon.json | tee /etc/docker/daemon.json
+    systemctl reload docker
+    [ "`docker ps -aqf "name=ipv6nat"`" == "" ] \
+    && docker run -d --name ipv6nat --privileged --network host --restart unless-stopped -v /var/run/docker.sock:/var/run/docker.sock:ro -v /lib/modules:/lib/modules:ro robbertkl/ipv6nat
+
+    caddy_backends=`docker ps -qf "network=caddy"`
+    caddy_ipv6_enabled=`docker network inspect caddy | jq '.[0].EnableIPv6'`
+    if ! [ "$caddy_ipv6_enabled" == "true" ]; then
+      for backend in $caddy_backends; do
+        docker network disconnect -f caddy $backend
+      done
+      docker network rm caddy
+      docker network create --ipv6 --subnet "fd00:dead:beef::/48" caddy > /dev/null
+      for backend in $caddy_backends; do
+        docker network connect caddy $backend
+      done
+    fi
+  fi
 
   green "Creating Trojan config..."
   mkdir -p ./trojan/config
@@ -131,7 +172,8 @@ function up () {
         "cert": "/ssl/$DOMAIN_NAME/$DOMAIN_NAME.crt",
         "key": "/ssl/$DOMAIN_NAME/$DOMAIN_NAME.key",
         "key_password": "",
-        "cipher": "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256",
+        "cipher": "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384",
+        "cipher_tls13": "TLS_AES_128_GCM_SHA256:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_256_GCM_SHA384",
         "prefer_server_cipher": true,
         "alpn": [
             "h2",
@@ -283,8 +325,13 @@ EOF
       cp "./docker-proxy.yml" "./docker-compose.yml"
       green "Starting docker containers..."
       set +e
-      docker network create caddy
+      [ "`docker ps -qf "network=caddy" | head -c 1`" == "" ] \
+      && docker network create caddy
       docker-compose -p "trojan-caddy" --env-file .env up -d
+      if [ $? != 0 ]; then
+        docker-compose -p "trojan-caddy" --env-file .env down
+        docker-compose -p "trojan-caddy" --env-file .env up -d
+      fi 
       read -p "$(blue 'Any URL for scheduled regular imports? ')" yn
       [ -z "${yn}" ] && yn="n"
       if [[ $yn == [Nn] ]]; then
@@ -330,6 +377,10 @@ networks:
 EOF
       docker-compose -p "caddy-archivebox" -f ./archivebox.yml --env-file /dev/null run archivebox init --setup
       docker-compose -p "caddy-archivebox" -f ./archivebox.yml --env-file /dev/null up -d
+      if [ $? != 0 ]; then
+        docker-compose -p "caddy-archivebox" -f ./archivebox.yml --env-file /dev/null down
+        docker-compose -p "caddy-archivebox" -f ./archivebox.yml --env-file /dev/null up -d
+      fi
       docker exec $(docker ps | grep archivebox-archivebox | awk '{ print $1 }') \
       archivebox config --set YOUTUBEDL_ARGS='["--write-description", "--write-info-json", "--write-annotations", "--write-thumbnail", "--no-call-home", "--write-sub", "--all-subs", "--write-auto-sub", "--convert-subs=srt", "--yes-playlist", "--continue", "--ignore-errors", "--geo-bypass", "--add-metadata", "--max-filesize=500m", "--sub-lang=en"]'
       green "======================="
@@ -344,6 +395,10 @@ EOF
 
   green "Starting docker containers..."
   docker-compose --env-file .env up -d
+  if [ $? != 0 ]; then
+    docker-compose --env-file .env down
+    docker-compose --env-file .env up -d
+  fi
   
   green "======================="
   blue "USER: $CONFIG_USERNAME"
@@ -367,7 +422,7 @@ function install_docker_compose () {
   set +e
   docker-compose -v >/dev/null 2>&1
   if [ $? != 0 ]; then
-    $systemPackage -y install python-pip
+    $PKGMANAGER -y install python-pip
     pip install --upgrade pip
     pip install docker-compose
 
@@ -380,7 +435,7 @@ function install_docker_compose () {
 }
 
 function consolidate () {
-  $systemPackage -y install git
+  $PKGMANAGER -y install git
   set -e
   REPOSITORY=consolidate-clash-profiles
   if [ -d "$REPOSITORY" ]; then
@@ -498,10 +553,13 @@ EOF
   test -f .env &&  source .env
   source "$ENV_FILE"
   set +o allexport
-
-  docker network create caddy
-  docker-compose -p "$REPOSITORY" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d --build
-  
+  [ "`docker ps -qf "network=caddy" | head -c 1`" == "" ] \
+  && docker network create caddy
+  docker-compose -p "$REPOSITORY" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d
+  if [ $? != 0 ]; then
+    docker-compose -p "$REPOSITORY" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" down
+    docker-compose -p "$REPOSITORY" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d
+  fi
   if [ "$DOMAIN_NAME" == "" ]; then
     read -e -i "$DOMAIN_NAME" -p "$(blue 'Enter the domain name: ')" DOMAIN_NAME
   fi
