@@ -120,8 +120,10 @@ function up () {
 
   ipv6_disabled=`sysctl net.ipv6.conf.all.disable_ipv6 | sed -r 's/net.ipv6.conf.all.disable_ipv6\s=\s//'`
   ipv6_addr=`curl -6 --silent https://ipv6.icanhazip.com`
+  network_interface="0.0.0.0"
   if [ $? != 0 ] || [ $ipv6_disabled != 0 ] ; then
     red "IPv6 is not available, falling back on IPv4 only"
+    network_interface="0.0.0.0"
   else
     green "Enabling IPv6 support in Docker containers..."
     ipv6_interface=`ip -6 addr show dev eth0 | awk '/inet6/{print $2}' | grep -v ^::1 | grep -v ^fe80 | head -n 1`
@@ -155,6 +157,7 @@ EOF
         docker network connect caddy $backend
       done
     fi
+    network_interface="::"
   fi
 
   green "Creating Trojan config..."
@@ -162,7 +165,7 @@ EOF
 	cat > ./trojan/config/config.json <<-EOF
 {
     "run_type": "server",
-    "local_addr": "0.0.0.0",
+    "local_addr": "$network_interface",
     "local_port": 443,
     "remote_addr": "caddy",
     "remote_port": 4433,
