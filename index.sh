@@ -110,7 +110,7 @@ function up () {
   local_addr=`curl -4 --silent ipv4.icanhazip.com`
 
   if [ $dig_rtcode != 0 ]; then
-    red "unrecoverable error: dig is not available"
+    red "Unrecoverable error: dig is not available"
     read -p "$(red 'Type y to continue: ')" yn
     [ -z "${yn}" ] && yn="n"
     if [[ $yn != [Yy] ]]; then
@@ -136,13 +136,19 @@ function up () {
   ipv6_enabled="false"
   network_interface="0.0.0.0"
   ipv6_disabled=`sysctl net.ipv6.conf.all.disable_ipv6 | sed -r 's/net.ipv6.conf.all.disable_ipv6\s=\s//'`
+  ipv6_interface=`ip -6 addr show dev eth0 | awk '/inet6/{print $2}' | grep -v ^::1 | grep -v ^fe80 | head -n 1`
   ipv6_addr=`curl -6 --silent https://ipv6.icanhazip.com`
   if [ $? != 0 ] || [ $ipv6_disabled != 0 ]; then
-    red "IPv6 is not available, falling back on IPv4 only"
+    red "IPv6 is not available, falling back to IPv4 only"
+    network_interface="0.0.0.0"
+  elif [ "$ipv6_interface" == "" ]; then
+    red "Can't find a public IPv6 address on this machine,"
+    red "but IPv6 is enabled."
+    red "Falling back to IPv4 only."
     network_interface="0.0.0.0"
   else
     green "Enabling IPv6 support in Docker containers..."
-    ipv6_interface=`ip -6 addr show dev eth0 | awk '/inet6/{print $2}' | grep -v ^::1 | grep -v ^fe80 | head -n 1`
+    green "IPv6 addresses at hand: $ipv6_addr - $ipv6_interface"
     jq -h > /dev/null
     if [ $? != 0 ]; then
       $PKGMANAGER install -y jq
@@ -340,9 +346,24 @@ EOF
   source .env
   set +o allexport
 
-  if [ -f "./docker-proxy.yml" ]; then 
-    read -p "$(blue 'Set up an Archive Box decoy site? (Y/n) ')" yn
+  if ! [ -f "./docker-proxy.yml"  ] && [ "$ipv6_enabled" == "true" ]; then
+    red "Can't find ./docker-proxy.yml while IPv6 is enabled"
+    red "Please check the integrity of $PWD"
+    read -p "$(red 'Type y to continue the script: ')" yn
     [ -z "${yn}" ] && yn="n"
+    if [[ $yn != [Yy] ]]; then
+      return 1
+    fi
+  fi
+
+  if [ -f "./docker-proxy.yml" ]; then
+    if ! [ "$ipv6_enabled" == "true" ]; then
+      read -p "$(blue 'Set up an Archive Box decoy site? (Y/n) ')" yn
+      [ -z "${yn}" ] && yn="n"
+    else
+      yn="y"
+    fi
+    
     if [[ $yn == [Yy] ]]; then
       test -f "./docker-compose.yml" && mv "./docker-compose.yml" "./docker-compose.yml.bak"
       cp "./docker-proxy.yml" "./docker-compose.yml"
@@ -477,6 +498,19 @@ function consolidate () {
   else
     git clone --depth 1 https://github.com/edfus/"$REPOSITORY"
   fi
+
+  if [ "`docker ps -qf "network=caddy" | head -c 1`" == "" ]; then
+    red "Unrecoverable error: can't find a pre-existing caddy network"
+    red "If you are settng up a server dedicated to Trojan services,"
+    red "run this script again with switch --up on AND choose to set up"
+    red "an Archivebox decoy site or an IPv6 interface when prompted."
+    red ""
+    red "Or create a caddy dynamic reverse proxy network manually."
+    red "Refer to lucaslorentz/caddy-docker-proxy and docker-proxy.yml"
+    red "for details, if that's the case."
+    return 1
+  fi
+
   COMPOSE_FILE="./$REPOSITORY/docker-compose.yml"
   ENV_FILE="./$REPOSITORY/.env"
 
@@ -579,8 +613,7 @@ EOF
   test -f .env &&  source .env
   source "$ENV_FILE"
   set +o allexport
-  [ "`docker ps -qf "network=caddy" | head -c 1`" == "" ] \
-  && docker network create caddy
+
   docker-compose -p "$REPOSITORY" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d >/dev/null
   if [ $? != 0 ]; then
     docker-compose -p "$REPOSITORY" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" down
