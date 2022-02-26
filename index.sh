@@ -17,33 +17,33 @@ urandom () {
 }
 
 if [[ -f /etc/redhat-release ]]; then
-    release="centos"
+    RELEASE="centos"
     PKGMANAGER="yum"
-    systempwd="/usr/lib/systemd/system/"
+    SYSTEMPWD="/usr/lib/systemd/system/"
 elif cat /etc/issue | grep -Eqi "debian"; then
-    release="debian"
+    RELEASE="debian"
     PKGMANAGER="apt-get"
-    systempwd="/lib/systemd/system/"
+    SYSTEMPWD="/lib/systemd/system/"
 elif cat /etc/issue | grep -Eqi "ubuntu"; then
-    release="ubuntu"
+    RELEASE="ubuntu"
     PKGMANAGER="apt-get"
-    systempwd="/lib/systemd/system/"
+    SYSTEMPWD="/lib/systemd/system/"
 elif cat /etc/issue | grep -Eqi "centos|red hat|redhat"; then
-    release="centos"
+    RELEASE="centos"
     PKGMANAGER="yum"
-    systempwd="/usr/lib/systemd/system/"
+    SYSTEMPWD="/usr/lib/systemd/system/"
 elif cat /proc/version | grep -Eqi "debian"; then
-    release="debian"
+    RELEASE="debian"
     PKGMANAGER="apt-get"
-    systempwd="/lib/systemd/system/"
+    SYSTEMPWD="/lib/systemd/system/"
 elif cat /proc/version | grep -Eqi "ubuntu"; then
-    release="ubuntu"
+    RELEASE="ubuntu"
     PKGMANAGER="apt-get"
-    systempwd="/lib/systemd/system/"
+    SYSTEMPWD="/lib/systemd/system/"
 elif cat /proc/version | grep -Eqi "centos|red hat|redhat"; then
-    release="centos"
+    RELEASE="centos"
     PKGMANAGER="yum"
-    systempwd="/usr/lib/systemd/system/"
+    SYSTEMPWD="/usr/lib/systemd/system/"
 fi
 
 function up () {
@@ -56,6 +56,11 @@ function up () {
   set -o allexport
   [ -f .env ] && source .env
   set +o allexport
+
+  netstat -v >/dev/null 2>&1
+  if [ $? != 0 ]; then
+    $PKGMANAGER install -y net-tools
+  fi
 
   port80=`netstat -tlpn | awk -F '[: ]+' '$1=="tcp"{print $5}' | grep -w 80`
   port443=`netstat -tlpn | awk -F '[: ]+' '$1=="tcp"{print $5}' | grep -w 443`
