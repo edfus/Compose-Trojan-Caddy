@@ -459,7 +459,11 @@ function install_docker_compose () {
 }
 
 function consolidate () {
-  $PKGMANAGER -y install git
+  git --version > /dev/null 2>&1
+  if [ $? != 0 ]; then
+    set -e
+    $PKGMANAGER -y install git
+  fi
   set -e
   REPOSITORY=consolidate-clash-profiles
   if [ -d "$REPOSITORY" ]; then
@@ -476,6 +480,7 @@ function consolidate () {
   COMPOSE_FILE="./$REPOSITORY/docker-compose.yml"
   ENV_FILE="./$REPOSITORY/.env"
 
+  set +e
   set -o allexport
   test -f "$ENV_FILE" && source "$ENV_FILE"
   set +o allexport
@@ -514,7 +519,6 @@ networks:
     external: true
 EOF
 
-  set +e
   if [ "$PROFILES_SRC" == "" ]; then
     if ! [ -f profiles.js ]; then
       cat>profiles.js<<EOF
@@ -577,7 +581,7 @@ EOF
   set +o allexport
   [ "`docker ps -qf "network=caddy" | head -c 1`" == "" ] \
   && docker network create caddy
-  docker-compose -p "$REPOSITORY" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d
+  docker-compose -p "$REPOSITORY" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d >/dev/null
   if [ $? != 0 ]; then
     docker-compose -p "$REPOSITORY" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" down
     docker-compose -p "$REPOSITORY" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d
