@@ -97,13 +97,23 @@ function up () {
   real_addr=`dig +short "$DOMAIN_NAME"`
   dig_rtcode=$?
   if [ $dig_rtcode != 0 ]; then
-    $PKGMANAGER -y install dnsutils bind-tools
+    $PKGMANAGER -y install dnsutils
+    $PKGMANAGER -y install bind-utils
     real_addr=`dig +short "$DOMAIN_NAME"`
-    $dig_rtcode=$?
+    dig_rtcode=$?
   fi
   local_addr=`curl -4 --silent ipv4.icanhazip.com`
 
-  if [ $dig_rtcode == 0  ] && [ "$real_addr" != "$local_addr" ] ; then
+  if [ $dig_rtcode != 0 ]; then
+    red "unrecoverable error: dig is not available"
+    read -p "$(red 'Type y to continue: ')" yn
+    [ -z "${yn}" ] && yn="n"
+    if [[ $yn != [Yy] ]]; then
+      return 1
+    fi
+  fi
+
+  if [ $dig_rtcode == 0 ] && [ "$real_addr" != "$local_addr" ] ; then
     red "================================"
     red "$real_addr != $local_addr"
     red "================================"
@@ -118,11 +128,11 @@ function up () {
   install_docker
   install_docker_compose
 
-  ipv6_disabled=`sysctl net.ipv6.conf.all.disable_ipv6 | sed -r 's/net.ipv6.conf.all.disable_ipv6\s=\s//'`
-  ipv6_addr=`curl -6 --silent https://ipv6.icanhazip.com`
   ipv6_enabled="false"
   network_interface="0.0.0.0"
-  if [ $? != 0 ] || [ $ipv6_disabled != 0 ] ; then
+  ipv6_disabled=`sysctl net.ipv6.conf.all.disable_ipv6 | sed -r 's/net.ipv6.conf.all.disable_ipv6\s=\s//'`
+  ipv6_addr=`curl -6 --silent https://ipv6.icanhazip.com`
+  if [ $? != 0 ] || [ $ipv6_disabled != 0 ]; then
     red "IPv6 is not available, falling back on IPv4 only"
     network_interface="0.0.0.0"
   else
@@ -174,7 +184,7 @@ EOF
     "password": [
         "$TROJAN_PASSWORD"
     ],
-    "log_level": 1,
+    "log_level": 2,
     "ssl": {
         "cert": "/ssl/$DOMAIN_NAME/$DOMAIN_NAME.crt",
         "key": "/ssl/$DOMAIN_NAME/$DOMAIN_NAME.key",
@@ -270,6 +280,7 @@ rules:
   - DOMAIN,dns.msftncsi.com,Microsoft Network Connectivity Status Indicator
   - DOMAIN,www.msftncsi.com,Microsoft Network Connectivity Status Indicator
   - DOMAIN,www.msftconnecttest.com,Microsoft Network Connectivity Status Indicator
+  - DOMAIN,ipv6.msftconnecttest.com,Microsoft Network Connectivity Status Indicator
   - IP-CIDR,0.0.0.0/8,DIRECT,no-resolve
   - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
   - IP-CIDR,100.64.0.0/10,DIRECT,no-resolve
