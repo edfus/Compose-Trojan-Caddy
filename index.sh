@@ -57,7 +57,7 @@ function up () {
   [ -f .env ] && source .env
   set +o allexport
 
-  netstat -v >/dev/null 2>&1
+  netstat --version >/dev/null 2>&1
   if [ $? != 0 ]; then
     $PKGMANAGER install -y net-tools
   fi
@@ -136,7 +136,7 @@ function up () {
   ipv6_enabled="false"
   network_interface="0.0.0.0"
   ipv6_disabled=`sysctl net.ipv6.conf.all.disable_ipv6 | sed -r 's/net.ipv6.conf.all.disable_ipv6\s=\s//'`
-  ipv6_interface=`ip -6 addr show dev eth0 | awk '/inet6/{print $2}' | grep -v ^::1 | grep -v ^fe80 | head -n 1`
+  ipv6_interface=`ip -6 addr | awk '/inet6/{print $2}' | grep -v ^::1 | grep -v ^fe80 | head -n 1`
   ipv6_addr=`curl -6 --silent https://ipv6.icanhazip.com`
   if [ $? != 0 ] || [ $ipv6_disabled != 0 ]; then
     red "IPv6 is not available, falling back to IPv4 only"
@@ -174,7 +174,7 @@ EOF
         docker network disconnect -f caddy $backend
       done
       docker network rm caddy
-      docker network create --ipv6 --subnet "fd00:dead:beef::/48" --gateway "fd00:dead:beef::254" caddy > /dev/null
+      docker network create --ipv6 --subnet "fd00:dead:beef::/48" caddy > /dev/null
       for backend in $caddy_backends; do
         docker network connect caddy $backend
       done
@@ -309,7 +309,8 @@ rules:
 hosts:
   # https://github.com/curl/curl/wiki/DNS-over-HTTPS
   # https://en.wikipedia.org/wiki/Public_recursive_name_server
-  $DOMAIN_NAME: $([ "$ipv6_enabled" == "true" ] && echo "\"[$ipv6_addr]\"" || echo $local_addr)
+  $([ "$ipv6_enabled" == "true" ] && echo "# $DOMAIN_NAME: \"[$ipv6_addr]\"")
+  $([ "$ipv6_enabled" == "true" ] && echo "# ")$DOMAIN_NAME: $local_addr
   # dns.google: 8.8.8.8
   # dns-unfiltered.adguard.com: 94.140.14.140
   # sandbox.opendns.com: 208.67.222.2
@@ -635,6 +636,19 @@ EOF
   docker logs $(docker ps | grep clash | head -n 1 | awk '{ print $1 }') --follow
 }
 
+function down () {
+  caddy_backends=`docker ps -qf "network=caddy"`
+  if [ "$caddy_backends" == "" ]; then
+    docker-compose down
+    return
+  fi
+  for backend in $caddy_backends; do
+    docker network disconnect -f caddy $backend
+    docker stop $backend && docker rm $backend
+  done
+  docker network rm caddy
+}
+
 if [[ $# -eq 0 ]]; then
   up
   exit
@@ -642,6 +656,10 @@ fi
 
 # https://stackoverflow.com/a/14203146/13910382
 POSITIONAL_ARGS=()
+
+UP=
+DOWN=
+CONSOLIDATE=
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -651,6 +669,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     -u|--up)
       UP=YES
+      shift # past argument
+      ;;
+    -d|--down)
+      DOWN=YES
       shift # past argument
       ;;
     -i|--injections)
@@ -689,6 +711,10 @@ while [[ $# -gt 0 ]]; do
 done
 
 set -- "${POSITIONAL_ARGS[@]}" # restore positional parameters
+
+if [ "$DOWN" == YES ]; then
+  down
+fi
 
 if [ "$UP" == YES ]; then
   up
