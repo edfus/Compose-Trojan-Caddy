@@ -128,10 +128,10 @@ function up () {
   green "Generating a good random password..."
   readonly TROJAN_PASSWORD="$(urandom 10)"
 
-  green "Intalling packages..."
-
   install_docker
   install_docker_compose
+
+  green "Checking if IPv6 is supported..."
 
   ipv6_enabled="false"
   network_interface="0.0.0.0"
@@ -148,7 +148,7 @@ function up () {
     network_interface="0.0.0.0"
   else
     green "Enabling IPv6 support in Docker containers..."
-    green "IPv6 addresses at hand: $ipv6_addr - $ipv6_cidr"
+    green "IPv6 addresses: $ipv6_addr - $ipv6_cidr"
     jq -h > /dev/null
     if [ $? != 0 ]; then
       $PKGMANAGER install -y jq
@@ -167,28 +167,46 @@ EOF
     # [ "`docker ps -aqf "name=ipv6nat"`" == "" ] \
     # && docker run -d --name ipv6nat --privileged --network host --restart unless-stopped -v /var/run/docker.sock:/var/run/docker.sock:ro -v /lib/modules:/lib/modules:ro robbertkl/ipv6nat
 
-    caddy_backends=`docker ps -qf "network=caddy"`
-    caddy_ipv6_enabled=`docker network inspect caddy | jq '.[0].EnableIPv6'`
+    docker network inspect caddy >/dev/null 2>&1
+    caddy_pre_existed=`[ $? == 0 ] && echo "true" || echo "false"`
 
     IFS=/ read ipv6_cidr_addr ipv6_cidr_subnet <<< "$ipv6_cidr"
+    ipv6_cidr_colon_occurrences=`tr -dc ':' <<<"$ipv6_cidr_addr" | wc -c`
+    
+    if [ "$ipv6_cidr_colon_occurrences" -gt 5 ]; then
+      read -e -i "$ipv6_cidr" -p "$(blue 'Is this a valid IPv6 CIDR subnet notation? ')" ipv6_cidr 
+      IFS=/ read ipv6_cidr_addr ipv6_cidr_subnet <<< "$ipv6_cidr"
+    fi
 
     if [ "$ipv6_cidr_subnet" -gt 80 ]; then
-      echo "It is said taht the IPv6 subnet should at least have a size of /80 (Docker 17.09)"
+      red "It is said that the IPv6 subnet should at least have a size of /80 (Docker 17.09)"
       ipv6_caddy_block="$ipv6_cidr_addr/$ipv6_cidr_subnet"
     else
       ipv6_caddy_block="$ipv6_cidr_addr/80"
     fi
 
-    if ! [ "$caddy_ipv6_enabled" == "true" ]; then
-      for backend in $caddy_backends; do
-        docker network disconnect -f caddy $backend
-      done
-      docker network rm caddy
-      docker network create --ipv6 --subnet "$ipv6_caddy_block" caddy > /dev/null
-      for backend in $caddy_backends; do
-        docker network connect caddy $backend
-      done
+    if [ "$caddy_pre_existed" == "true" ]; then
+      caddy_ipv6_enabled=`docker network inspect caddy | jq '.[0].EnableIPv6'`
+      caddy_backends=`docker ps -qf "network=caddy"`
+
+      if [ "$caddy_ipv6_enabled" == "false" ]; then
+        for backend in $caddy_backends; do
+          docker network disconnect -f caddy $backend
+        done
+        docker network rm caddy > /dev/null
+      fi
     fi
+
+    docker network create --ipv6 --subnet "$ipv6_caddy_block" caddy > /dev/null
+
+    if [ "$caddy_pre_existed" == "true" ]; then
+      if [ "$caddy_ipv6_enabled" == "false" ]; then
+        for backend in $caddy_backends; do
+          docker network connect caddy $backend
+        done
+      fi
+    fi
+
     network_interface="::"
     ipv6_enabled="true"
   fi
@@ -677,11 +695,11 @@ while [[ $# -gt 0 ]]; do
       CONSOLIDATE=YES
       shift # past argument
       ;;
-    -u|--up)
+    -u|--up|up)
       UP=YES
       shift # past argument
       ;;
-    -d|--down)
+    -d|--down|down)
       DOWN=YES
       shift # past argument
       ;;
