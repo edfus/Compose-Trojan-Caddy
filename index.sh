@@ -170,21 +170,6 @@ EOF
     docker network inspect caddy >/dev/null 2>&1
     caddy_pre_existed=`[ $? == 0 ] && echo "true" || echo "false"`
 
-    IFS=/ read ipv6_cidr_addr ipv6_cidr_subnet <<< "$ipv6_cidr"
-    ipv6_cidr_colon_occurrences=`tr -dc ':' <<<"$ipv6_cidr_addr" | wc -c`
-    
-    if [ "$ipv6_cidr_colon_occurrences" -gt 5 ]; then
-      read -e -i "$ipv6_cidr" -p "$(blue 'Is this a valid IPv6 CIDR subnet notation? ')" ipv6_cidr 
-      IFS=/ read ipv6_cidr_addr ipv6_cidr_subnet <<< "$ipv6_cidr"
-    fi
-
-    if [ "$ipv6_cidr_subnet" -gt 80 ]; then
-      red "It is said that the IPv6 subnet should at least have a size of /80 (Docker 17.09)"
-      ipv6_caddy_block="$ipv6_cidr_addr/$ipv6_cidr_subnet"
-    else
-      ipv6_caddy_block="$ipv6_cidr_addr/80"
-    fi
-
     if [ "$caddy_pre_existed" == "true" ]; then
       caddy_ipv6_enabled=`docker network inspect caddy | jq '.[0].EnableIPv6'`
       caddy_backends=`docker ps -qf "network=caddy"`
@@ -197,7 +182,23 @@ EOF
       fi
     fi
 
-    docker network create --ipv6 --subnet "$ipv6_caddy_block" caddy > /dev/null
+    if [ "$caddy_pre_existed" != "true" ] || [ "$caddy_ipv6_enabled" == "false" ]; then
+      IFS=/ read ipv6_cidr_addr ipv6_cidr_subnet <<< "$ipv6_cidr"
+      ipv6_cidr_colon_occurrences=`tr -dc ':' <<<"$ipv6_cidr_addr" | wc -c`
+      
+      if [ "$ipv6_cidr_colon_occurrences" -gt 5 ]; then
+        read -e -i "$ipv6_cidr" -p "$(blue 'Is this a valid IPv6 CIDR subnet notation? ')" ipv6_cidr 
+        IFS=/ read ipv6_cidr_addr ipv6_cidr_subnet <<< "$ipv6_cidr"
+      fi
+
+      if [ "$ipv6_cidr_subnet" -gt 80 ]; then
+        # red "It is said that the IPv6 subnet should at least have a size of /80 (Docker 17.09)"
+        ipv6_caddy_block="$ipv6_cidr_addr/$ipv6_cidr_subnet"
+      else
+        ipv6_caddy_block="$ipv6_cidr_addr/80"
+      fi
+      docker network create --ipv6 --subnet "$ipv6_caddy_block" caddy > /dev/null
+    fi
 
     if [ "$caddy_pre_existed" == "true" ]; then
       if [ "$caddy_ipv6_enabled" == "false" ]; then
@@ -691,7 +692,7 @@ CONSOLIDATE=
 
 while [[ $# -gt 0 ]]; do
   case $1 in
-    -c|--consolidate)
+    -c|--consolidate|consolidate)
       CONSOLIDATE=YES
       shift # past argument
       ;;
