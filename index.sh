@@ -136,19 +136,19 @@ function up () {
   ipv6_enabled="false"
   network_interface="0.0.0.0"
   ipv6_disabled=`sysctl net.ipv6.conf.all.disable_ipv6 | sed -r 's/net.ipv6.conf.all.disable_ipv6\s=\s//'`
-  ipv6_interface=`ip -6 addr | awk '/inet6/{print $2}' | grep -v ^::1 | grep -v ^fe80 | head -n 1`
+  ipv6_cidr=`ip -6 addr | awk '/inet6/{print $2}' | grep -v ^::1 | grep -v ^fe80 | head -n 1`
   ipv6_addr=`curl -6 --silent https://ipv6.icanhazip.com`
   if [ $? != 0 ] || [ $ipv6_disabled != 0 ]; then
     red "IPv6 is not available, falling back to IPv4 only"
     network_interface="0.0.0.0"
-  elif [ "$ipv6_interface" == "" ]; then
+  elif [ "$ipv6_cidr" == "" ]; then
     red "Can't find a public IPv6 address on this machine,"
     red "but IPv6 is enabled."
     red "Falling back to IPv4 only."
     network_interface="0.0.0.0"
   else
     green "Enabling IPv6 support in Docker containers..."
-    green "IPv6 addresses at hand: $ipv6_addr - $ipv6_interface"
+    green "IPv6 addresses at hand: $ipv6_addr - $ipv6_cidr"
     jq -h > /dev/null
     if [ $? != 0 ]; then
       $PKGMANAGER install -y jq
@@ -157,7 +157,7 @@ function up () {
     jq -s add <(cat <<EOF
 {
   "ipv6": true,
-  "fixed-cidr-v6": "$ipv6_interface",
+  "fixed-cidr-v6": "fd00:dead:beef:abcd::/64",
   "experimental": true,
   "ip6tables": true
 }
@@ -169,12 +169,22 @@ EOF
 
     caddy_backends=`docker ps -qf "network=caddy"`
     caddy_ipv6_enabled=`docker network inspect caddy | jq '.[0].EnableIPv6'`
+
+    IFS=/ read ipv6_cidr_addr ipv6_cidr_subnet <<< "$ipv6_cidr"
+
+    if [ "$ipv6_cidr_subnet" -gt 80 ]; then
+      echo "It is said taht the IPv6 subnet should at least have a size of /80 (Docker 17.09)"
+      ipv6_caddy_block="$ipv6_cidr_addr/$ipv6_cidr_subnet"
+    else
+      ipv6_caddy_block="$ipv6_cidr_addr/80"
+    fi
+
     if ! [ "$caddy_ipv6_enabled" == "true" ]; then
       for backend in $caddy_backends; do
         docker network disconnect -f caddy $backend
       done
       docker network rm caddy
-      docker network create --ipv6 --subnet "fd00:dead:beef::/48" caddy > /dev/null
+      docker network create --ipv6 --subnet "$ipv6_caddy_block" caddy > /dev/null
       for backend in $caddy_backends; do
         docker network connect caddy $backend
       done
