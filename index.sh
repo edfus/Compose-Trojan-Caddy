@@ -141,7 +141,6 @@ function up () {
   network_interface="0.0.0.0"
   ipv6_disabled=`sysctl net.ipv6.conf.all.disable_ipv6 | sed -r 's/net.ipv6.conf.all.disable_ipv6\s=\s//'`
   ipv6_cidr=`get_ipv6_cidr`
-  ipv6_addr=`curl -6 --silent https://ipv6.icanhazip.com`
   if [ $? != 0 ] || [ $ipv6_disabled != 0 ]; then
     red "IPv6 is not available, falling back to IPv4 only"
     network_interface="0.0.0.0"
@@ -152,7 +151,6 @@ function up () {
     network_interface="0.0.0.0"
   else
     green "Enabling IPv6 support in Docker containers..."
-    green "IPv6 addresses: $ipv6_addr - $ipv6_cidr"
     jq -h > /dev/null
     if [ $? != 0 ]; then
       $PKGMANAGER install -y jq
@@ -214,8 +212,29 @@ EOF
       #   ipv6_caddy_block="$ipv6_cidr_addr/80"
       # fi
 
+      echo "+ docker network create --ipv6 --subnet $ipv6_range caddy"
       docker network create --ipv6 --subnet "$ipv6_range" caddy > /dev/null
+      echo "+ docker run --rm --network caddy curlimages/curl curl -s -m 5 icanhazip.com"
+    else
+      caddy_ipv6_cidr="`docker network inspect caddy | jq -c '(.[0].IPAM.Config[] | select(.Subnet | contains(":")).Subnet)'`"
+      # stripping double quotes
+      caddy_ipv6_cidr="${caddy_ipv6_cidr%\"}"
+      caddy_ipv6_cidr="${caddy_ipv6_cidr#\"}"
     fi
+
+    ipv6_addr_result=`docker run --rm --network caddy curlimages/curl curl -s -m 5 icanhazip.com`
+    if [ "$ipv6_addr_result" == "" ]; then
+      red "+ docker run --rm --network caddy curlimages/curl curl -s -m 5 icanhazip.com"
+      red "+ failed"
+      red "`printf '=%.0s' $(seq 1 $(tput cols))`"
+      red "`docker network inspect caddy`"
+      red "`printf '=%.0s' $(seq 1 $(tput cols))`"
+      red "+ IP configurations:"
+      red "`ip -6 addr | grep global | grep -v ::1 | grep -v fe80 | grep -v fd00`"
+      return 1
+    fi
+    echo "IPv6 subnet assigned: $caddy_ipv6_cidr"
+    echo "IPv6 address in containers: $ipv6_addr_result"
 
     if [ "$caddy_network_exists" == "true" ]; then
       if [ "$caddy_ipv6_enabled" == "false" ]; then
@@ -358,7 +377,6 @@ rules:
 hosts:
   # https://github.com/curl/curl/wiki/DNS-over-HTTPS
   # https://en.wikipedia.org/wiki/Public_recursive_name_server
-  $([ "$ipv6_enabled" == "true" ] && echo "# $DOMAIN_NAME: \"[$ipv6_addr]\"")
   $([ "$ipv6_enabled" == "true" ] && echo "# ")$DOMAIN_NAME: $local_addr
   # dns.google: 8.8.8.8
   # dns-unfiltered.adguard.com: 94.140.14.140
@@ -426,7 +444,7 @@ EOF
         docker-compose -p "trojan-caddy" --env-file .env down
         docker-compose -p "trojan-caddy" --env-file .env up -d
       fi 
-      read -p "$(blue 'Any URL for scheduled regular imports? ')" yn
+      read -e -i "n" -p "$(blue 'Any URL for scheduled regular imports? ')" yn
       [ -z "${yn}" ] && yn="n"
       if [[ $yn == [Nn] ]]; then
         ENABLE_SCHEDULE=/bin/false
