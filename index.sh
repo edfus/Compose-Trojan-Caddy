@@ -132,9 +132,6 @@ function up () {
     return 1
   fi
 
-  green "Generating a good random password..."
-  readonly TROJAN_PASSWORD="$(urandom 10)"
-
   install_docker
   install_docker_compose
 
@@ -197,8 +194,15 @@ EOF
       ipv6_network_addr_colon_occurrences=`tr -dc ':' <<<"$ipv6_network_addr" | wc -c`
       ipv6_network_prefix="$(( "$ipv6_network_addr_colon_occurrences" * 16 + 16 ))"
 
-      if [ "${ipv6_network_prefix}" -gt 124 ] || [ "${ipv6_network_prefix}" -le 32 ]; then
-        ipv6_network_prefix=$ipv6_cidr_subnet
+      # https://github.com/Jimdo/facter/blob/534ee7f7d9ff62c31a32664258af89c8e1f95c37/lib/facter/util/manufacturer.rb#L7
+      if [ "`/usr/sbin/dmidecode 2>/dev/null | grep Droplet`" != "" ]; then 
+        ipv6_network_prefix=124 # Digital ocean droplet
+      else
+        if [ "${ipv6_network_prefix}" -ge 112 ]; then
+          ipv6_network_prefix=$ipv6_cidr_subnet
+        else
+          ipv6_network_prefix=$(( $ipv6_network_prefix + 16 )) #NOTE
+        fi
       fi
 
       read -e -i "${ipv6_cidr_addr}/${ipv6_network_prefix}" -p "$(blue 'IPv6 subnet range for the caddy network: ')" ipv6_range
@@ -224,6 +228,9 @@ EOF
     network_interface="::"
     ipv6_enabled="true"
   fi
+
+  green "Generating a good random password..."
+  readonly TROJAN_PASSWORD="$(urandom 12)"
 
   green "Creating Trojan config..."
   mkdir -p ./trojan/config

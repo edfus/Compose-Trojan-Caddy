@@ -41,6 +41,12 @@ if [ "$ipv6_range" == "" ]; then
   
   ipv6_network_addr_colon_occurrences=`tr -dc ':' <<<"$ipv6_network_addr" | wc -c`
   ipv6_network_prefix="$(( "$ipv6_network_addr_colon_occurrences" * 16 + 16 ))"
+  
+  # https://github.com/Jimdo/facter/blob/534ee7f7d9ff62c31a32664258af89c8e1f95c37/lib/facter/util/manufacturer.rb#L7
+  if [ "`/usr/sbin/dmidecode 2>/dev/null | grep Droplet`" != "" ]; then 
+    ipv6_network_prefix=124 # Digital ocean droplet
+  fi
+
   if [ "$ipv6_network_prefix" -gt 124 ]; then
     show_ipv6_settings
   fi
@@ -106,3 +112,19 @@ echo "+ curl -s -m 5 -6 icanhazip.com"
 curl -s -m 5 -6 icanhazip.com
 echo "+ curl -s -m 5 icanhazip.com"
 curl -s -m 5 icanhazip.com
+
+set +e
+docker -v >/dev/null 2>&1
+if [ $? == 0 ]; then
+  set -e
+  for network in `docker network ls --format "{{.Name}}"`; do 
+    if [ "$network" != "host" ] && [ "$network" != "none" ]; then 
+      if [ "`docker network inspect \"$network\" | jq '.[0].EnableIPv6'`" == "true" ]; then  
+        echo "+ docker run --rm --network $network curlimages/curl curl -s -m 5 icanhazip.com;"
+        docker run --rm --network "$network" curlimages/curl curl -s -m 5 icanhazip.com; 
+        echo "+ docker run --rm --network $network curlimages/curl curl -6 -s -m 5 icanhazip.com;"
+        docker run --rm --network "$network" curlimages/curl curl -6 -s -m 5 icanhazip.com; 
+      fi
+    fi 
+  done
+fi
