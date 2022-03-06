@@ -183,22 +183,28 @@ EOF
     fi
 
     if [ "$caddy_network_exists" != "true" ] || [ "$caddy_ipv6_enabled" == "false" ]; then
+      ipv6_cidr=`ip -6 addr | awk '/inet6/{print $2}' | grep -v ^::1 | grep -v ^fe80 | head -n 1`
       IFS=/ read ipv6_cidr_addr ipv6_cidr_subnet <<< "$ipv6_cidr"
-      ipv6_cidr_colon_occurrences=`tr -dc ':' <<<"$ipv6_cidr_addr" | wc -c`
-      
-      if [ "$ipv6_cidr_colon_occurrences" -gt 5 ]; then
-        read -e -i "$ipv6_cidr" -p "$(blue 'Is this the valid IPv6 CIDR subnet notation? ')" ipv6_cidr 
-        IFS=/ read ipv6_cidr_addr ipv6_cidr_subnet <<< "$ipv6_cidr"
+      ipv6_addr_split=`awk -F'::' '{for(i=1;i<=NF;i++){print $i}}'  <<< "$ipv6_cidr_addr"`
+      IFS=$'\n' read ipv6_network_addr ipv6_trailing_addr <<< "$ipv6_addr_split"
+
+      ipv6_network_addr_colon_occurrences=`tr -dc ':' <<<"$ipv6_network_addr" | wc -c`
+      ipv6_network_prefix="$(( "$ipv6_network_addr_colon_occurrences" * 16 + 16 ))"
+
+      if [ "${ipv6_network_prefix}" -gt 124 ] || [ "${ipv6_network_prefix}" -le 32 ]; then
+        ipv6_network_prefix=$ipv6_cidr_subnet
       fi
 
-      if [ "$ipv6_cidr_subnet" -gt 80 ]; then
-        # red "It is said that the IPv6 subnet should at least have a size of /80 (Docker 17.09)"
-        ipv6_caddy_block="$ipv6_cidr_addr/$ipv6_cidr_subnet"
-      else
-        ipv6_caddy_block="$ipv6_cidr_addr/80"
-      fi
+      read -e -i "${ipv6_cidr_addr}/${ipv6_network_prefix}" -p "$(blue 'IPv6 subnet range for the caddy network: ')" ipv6_range
 
-      docker network create --ipv6 --subnet "$ipv6_caddy_block" caddy > /dev/null
+      # if [ "$ipv6_cidr_subnet" -gt 80 ]; then
+      #   # red "It is said that the IPv6 subnet should at least have a size of /80 (Docker 17.09)"
+      #   ipv6_caddy_block="$ipv6_cidr_addr/$ipv6_cidr_subnet"
+      # else
+      #   ipv6_caddy_block="$ipv6_cidr_addr/80"
+      # fi
+
+      docker network create --ipv6 --subnet "$ipv6_range" caddy > /dev/null
     fi
 
     if [ "$caddy_network_exists" == "true" ]; then

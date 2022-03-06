@@ -48,6 +48,7 @@ else
   ipv6_network_previous_cidr="$ipv6_network_cidr"
 fi
 
+#TODO: use ipv6calc
 IFS=/ read ipv6_cidr_addr ipv6_cidr_subnet <<< "$ipv6_range"
 if [ "$(which python3)" != "" ]; then
   ipv6_addr_exploded=`$(which python3) -c "import ipaddress
@@ -89,16 +90,12 @@ set -e
 blue "$(show_ipv6_settings)"
 
 printf '=%.0s' $(seq 1 $(tput cols))
+
 echo "+ sleep 5"
 sleep 5
+echo "+ curl -s -m 5 --interface $ipv6_network_addr -6 icanhazip.com"
+curl -s -m 5 -6 --interface "$ipv6_network_addr" icanhazip.com
+echo "+ curl -s -m 5 -6 icanhazip.com"
+curl -s -m 5 -6 icanhazip.com
 echo "+ curl -s -m 5 icanhazip.com"
-curl_result=$(curl -s -m 5 icanhazip.com); echo $curl_result
-if [ "$curl_result" != "$ipv6_network_addr" ]; then
-  echo "+ curl -s -m 5 -6 icanhazip.com"
-  curl_result=$(curl -s -m 5 -6 icanhazip.com); echo $curl_result
-  if [ "$curl_result" != "$ipv6_network_addr" ]; then
-    echo "+ curl -m 5 --interface $ipv6_network_addr -6 icanhazip.com"
-    curl -m 5 -6 --interface "$ipv6_network_addr" icanhazip.com
-  fi
-fi
-
+curl -s -m 5 icanhazip.com

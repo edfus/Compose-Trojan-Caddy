@@ -18,3 +18,9 @@ fi
 Tested on Ubuntu 20.04 LTS as root
 
 https://github.com/moby/moby/issues/43296
+
+IPv6 address rotation for outgoing requests:
+```bash
+./ipv6-rotaion.sh
+# it has a dependency on envfile="`basename "$0"`.env"
+```
