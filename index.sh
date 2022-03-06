@@ -406,7 +406,7 @@ EOF
       cp "./docker-proxy.yml" "./docker-compose.yml"
       green "Starting docker containers..."
       set +e
-      [ "`docker network inspect caddy2 >/dev/null 2>&1; echo $?`" != 0 ] \
+      [ "`docker network inspect caddy >/dev/null 2>&1; echo $?`" != 0 ] \
       && docker network create caddy
       docker-compose -p "trojan-caddy" --env-file .env up -d
       if [ $? != 0 ]; then
@@ -536,7 +536,7 @@ function consolidate () {
     git clone --depth 1 https://github.com/edfus/"$REPOSITORY"
   fi
 
-  if [ "`docker network inspect caddy2 >/dev/null 2>&1; echo $?`" != 0 ]; then
+  if [ "`docker network inspect caddy >/dev/null 2>&1; echo $?`" != 0 ]; then
     red "Unrecoverable error: can't find a pre-existing caddy network"
     red "If you are settng up a server dedicated to Trojan services,"
     red "run this script again with switch --up on AND choose to set up"
