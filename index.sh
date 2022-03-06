@@ -46,6 +46,13 @@ elif cat /proc/version | grep -Eqi "centos|red hat|redhat"; then
     SYSTEMPWD="/usr/lib/systemd/system/"
 fi
 
+get_ipv6_cidr () {
+  ip -6 addr | awk '/inet6/{print $2}' | grep -v ^::1 | grep -v ^fe80 | grep -v ^fd00 | awk -F'/' '
+    NR==1 || $2<max_block_size {max_block_size=$2; line=$1"/"$2}
+    END {print line}
+  '
+}
+
 function up () {
   set +e
   # docker-compose -p "trojan-caddy" down
@@ -136,7 +143,7 @@ function up () {
   ipv6_enabled="false"
   network_interface="0.0.0.0"
   ipv6_disabled=`sysctl net.ipv6.conf.all.disable_ipv6 | sed -r 's/net.ipv6.conf.all.disable_ipv6\s=\s//'`
-  ipv6_cidr=`ip -6 addr | awk '/inet6/{print $2}' | grep -v ^::1 | grep -v ^fe80 | head -n 1`
+  ipv6_cidr=`get_ipv6_cidr`
   ipv6_addr=`curl -6 --silent https://ipv6.icanhazip.com`
   if [ $? != 0 ] || [ $ipv6_disabled != 0 ]; then
     red "IPv6 is not available, falling back to IPv4 only"
@@ -183,7 +190,6 @@ EOF
     fi
 
     if [ "$caddy_network_exists" != "true" ] || [ "$caddy_ipv6_enabled" == "false" ]; then
-      ipv6_cidr=`ip -6 addr | awk '/inet6/{print $2}' | grep -v ^::1 | grep -v ^fe80 | head -n 1`
       IFS=/ read ipv6_cidr_addr ipv6_cidr_subnet <<< "$ipv6_cidr"
       ipv6_addr_split=`awk -F'::' '{for(i=1;i<=NF;i++){print $i}}'  <<< "$ipv6_cidr_addr"`
       IFS=$'\n' read ipv6_network_addr ipv6_trailing_addr <<< "$ipv6_addr_split"

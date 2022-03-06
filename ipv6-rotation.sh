@@ -10,6 +10,13 @@ red () {
     echo -e "\033[31m\033[01m$1\033[0m"
 }
 
+get_ipv6_cidr () {
+  ip -6 addr | awk '/inet6/{print $2}' | grep -v ^::1 | grep -v ^fe80 | grep -v ^fd00 | awk -F'/' '
+    NR==1 || $2<max_block_size {max_block_size=$2; line=$1"/"$2}
+    END {print line}
+  '
+}
+
 show_ipv6_settings () {
   ip -6 addr | grep global | grep -v ::1 | grep -v fe80 | grep -v fd00
 }
@@ -24,7 +31,7 @@ set +o allexport
 set -e
 if [ "$ipv6_range" == "" ]; then
   set +e
-  ipv6_cidr=`ip -6 addr | awk '/inet6/{print $2}' | grep -v ^::1 | grep -v ^fe80 | head -n 1`
+  ipv6_cidr=`get_ipv6_cidr`
   IFS=/ read ipv6_cidr_addr ipv6_cidr_subnet <<< "$ipv6_cidr"
   ipv6_addr_split=`awk -F'::' '{for(i=1;i<=NF;i++){print $i}}'  <<< "$ipv6_cidr_addr"`
   IFS=$'\n' read ipv6_network_addr ipv6_trailing_addr <<< "$ipv6_addr_split"
