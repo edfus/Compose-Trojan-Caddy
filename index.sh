@@ -168,9 +168,9 @@ EOF
     # && docker run -d --name ipv6nat --privileged --network host --restart unless-stopped -v /var/run/docker.sock:/var/run/docker.sock:ro -v /lib/modules:/lib/modules:ro robbertkl/ipv6nat
 
     docker network inspect caddy >/dev/null 2>&1
-    caddy_pre_existed=`[ $? == 0 ] && echo "true" || echo "false"`
+    caddy_network_exists=`[ $? == 0 ] && echo "true" || echo "false"`
 
-    if [ "$caddy_pre_existed" == "true" ]; then
+    if [ "$caddy_network_exists" == "true" ]; then
       caddy_ipv6_enabled=`docker network inspect caddy | jq '.[0].EnableIPv6'`
       caddy_backends=`docker ps -qf "network=caddy"`
 
@@ -182,12 +182,12 @@ EOF
       fi
     fi
 
-    if [ "$caddy_pre_existed" != "true" ] || [ "$caddy_ipv6_enabled" == "false" ]; then
+    if [ "$caddy_network_exists" != "true" ] || [ "$caddy_ipv6_enabled" == "false" ]; then
       IFS=/ read ipv6_cidr_addr ipv6_cidr_subnet <<< "$ipv6_cidr"
       ipv6_cidr_colon_occurrences=`tr -dc ':' <<<"$ipv6_cidr_addr" | wc -c`
       
       if [ "$ipv6_cidr_colon_occurrences" -gt 5 ]; then
-        read -e -i "$ipv6_cidr" -p "$(blue 'Is this a valid IPv6 CIDR subnet notation? ')" ipv6_cidr 
+        read -e -i "$ipv6_cidr" -p "$(blue 'Is this the valid IPv6 CIDR subnet notation? ')" ipv6_cidr 
         IFS=/ read ipv6_cidr_addr ipv6_cidr_subnet <<< "$ipv6_cidr"
       fi
 
@@ -197,10 +197,11 @@ EOF
       else
         ipv6_caddy_block="$ipv6_cidr_addr/80"
       fi
+
       docker network create --ipv6 --subnet "$ipv6_caddy_block" caddy > /dev/null
     fi
 
-    if [ "$caddy_pre_existed" == "true" ]; then
+    if [ "$caddy_network_exists" == "true" ]; then
       if [ "$caddy_ipv6_enabled" == "false" ]; then
         for backend in $caddy_backends; do
           docker network connect caddy $backend
@@ -399,7 +400,7 @@ EOF
       cp "./docker-proxy.yml" "./docker-compose.yml"
       green "Starting docker containers..."
       set +e
-      [ "`docker ps -qf "network=caddy" | head -c 1`" == "" ] \
+      [ "`docker network inspect caddy2 >/dev/null 2>&1; echo $?`" != 0 ] \
       && docker network create caddy
       docker-compose -p "trojan-caddy" --env-file .env up -d
       if [ $? != 0 ]; then
@@ -456,7 +457,7 @@ EOF
         docker-compose -p "caddy-archivebox" -f ./archivebox.yml --env-file /dev/null down
         docker-compose -p "caddy-archivebox" -f ./archivebox.yml --env-file /dev/null up -d
       fi
-      docker exec $(docker ps | grep archivebox-archivebox | awk '{ print $1 }') \
+      docker exec $(docker ps | grep archivebox[-_]archivebox | awk '{ print $1 }') \
       archivebox config --set YOUTUBEDL_ARGS='["--write-description", "--write-info-json", "--write-annotations", "--write-thumbnail", "--no-call-home", "--write-sub", "--all-subs", "--write-auto-sub", "--convert-subs=srt", "--yes-playlist", "--continue", "--ignore-errors", "--geo-bypass", "--add-metadata", "--max-filesize=500m", "--sub-lang=en"]'
       green "======================="
       blue "USER: $CONFIG_USERNAME"
@@ -529,7 +530,7 @@ function consolidate () {
     git clone --depth 1 https://github.com/edfus/"$REPOSITORY"
   fi
 
-  if [ "`docker ps -qf "network=caddy" | head -c 1`" == "" ]; then
+  if [ "`docker network inspect caddy2 >/dev/null 2>&1; echo $?`" != 0 ]; then
     red "Unrecoverable error: can't find a pre-existing caddy network"
     red "If you are settng up a server dedicated to Trojan services,"
     red "run this script again with switch --up on AND choose to set up"
