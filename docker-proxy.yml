@@ -8,7 +8,7 @@ services:
     volumes:
       - ./trojan/config:/config
       - ./ssl:/ssl
-      - ./trojan/wait_for_caddy.sh:/wait_for_caddy.sh
+      - ./trojan/wait-for-certificates.sh:/wait-for-certificates.sh
     working_dir: /config
     labels:
       - caddy=http://:4433
@@ -26,7 +26,7 @@ services:
       - caddy.1_route.1_header.Subscription-Userinfo="expire=${EXPIRE:-2274253409}"
       - caddy.1_route.2_file_server.root="/var/www/${DOMAIN_NAME:-localhost}"
       - caddy.1_route.2_file_server.browse=
-    command: ["sh", "/wait_for_caddy.sh", "trojan", "config.json"]
+    command: ["sh", "/wait-for-certificates.sh", "trojan", "config.json"]
     networks:
       - caddy
     logging:

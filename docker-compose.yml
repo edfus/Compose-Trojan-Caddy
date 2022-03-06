@@ -8,9 +8,9 @@ services:
     volumes:
       - ./trojan/config:/config
       - ./ssl:/ssl
-      - ./trojan/wait_for_caddy.sh:/wait_for_caddy.sh
+      - ./trojan/wait-for-certificates.sh:/wait-for-certificates.sh
     working_dir: /config
-    command: ["sh", "/wait_for_caddy.sh", "trojan", "config.json"]
+    command: ["sh", "/wait-for-certificates.sh", "trojan", "config.json"]
     networks:
       - frontend
     depends_on:
