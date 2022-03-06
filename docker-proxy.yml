@@ -37,6 +37,7 @@ services:
 
   caddy:
     image: lucaslorentz/caddy-docker-proxy:2.4.0-alpine
+    container_name: caddy
     ports:
       - "80:80"
     expose:
