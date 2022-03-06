@@ -3,13 +3,13 @@
 # set -e
 
 blue () {
-    echo -e "\033[34m\033[01m$1\033[0m"
+  echo -e "\033[34m\033[01m$1\033[0m"
 }
 green () {
-    echo -e "\033[32m\033[01m$1\033[0m"
+  echo -e "\033[32m\033[01m$1\033[0m"
 }
 red () {
-    echo -e "\033[31m\033[01m$1\033[0m"
+  echo -e "\033[31m\033[01m$1\033[0m"
 }
 
 urandom () {
@@ -17,33 +17,33 @@ urandom () {
 }
 
 if [[ -f /etc/redhat-release ]]; then
-    RELEASE="centos"
-    PKGMANAGER="yum"
-    SYSTEMPWD="/usr/lib/systemd/system/"
+  RELEASE="centos"
+  PKGMANAGER="yum"
+  SYSTEMPWD="/usr/lib/systemd/system/"
 elif cat /etc/issue | grep -Eqi "debian"; then
-    RELEASE="debian"
-    PKGMANAGER="apt-get"
-    SYSTEMPWD="/lib/systemd/system/"
+  RELEASE="debian"
+  PKGMANAGER="apt-get"
+  SYSTEMPWD="/lib/systemd/system/"
 elif cat /etc/issue | grep -Eqi "ubuntu"; then
-    RELEASE="ubuntu"
-    PKGMANAGER="apt-get"
-    SYSTEMPWD="/lib/systemd/system/"
+  RELEASE="ubuntu"
+  PKGMANAGER="apt-get"
+  SYSTEMPWD="/lib/systemd/system/"
 elif cat /etc/issue | grep -Eqi "centos|red hat|redhat"; then
-    RELEASE="centos"
-    PKGMANAGER="yum"
-    SYSTEMPWD="/usr/lib/systemd/system/"
+  RELEASE="centos"
+  PKGMANAGER="yum"
+  SYSTEMPWD="/usr/lib/systemd/system/"
 elif cat /proc/version | grep -Eqi "debian"; then
-    RELEASE="debian"
-    PKGMANAGER="apt-get"
-    SYSTEMPWD="/lib/systemd/system/"
+  RELEASE="debian"
+  PKGMANAGER="apt-get"
+  SYSTEMPWD="/lib/systemd/system/"
 elif cat /proc/version | grep -Eqi "ubuntu"; then
-    RELEASE="ubuntu"
-    PKGMANAGER="apt-get"
-    SYSTEMPWD="/lib/systemd/system/"
+  RELEASE="ubuntu"
+  PKGMANAGER="apt-get"
+  SYSTEMPWD="/lib/systemd/system/"
 elif cat /proc/version | grep -Eqi "centos|red hat|redhat"; then
-    RELEASE="centos"
-    PKGMANAGER="yum"
-    SYSTEMPWD="/usr/lib/systemd/system/"
+  RELEASE="centos"
+  PKGMANAGER="yum"
+  SYSTEMPWD="/usr/lib/systemd/system/"
 fi
 
 get_ipv6_cidr () {
