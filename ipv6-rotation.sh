@@ -216,15 +216,19 @@ if [ $? == 0 ]; then
           set -e
           IFS=/ read network_ipv6_addr network_ipv6_cidr_prefix <<< "$network_ipv6_cidr"
           if [ "$network_ipv6_cidr_prefix" -le "$ipv6_cidr_subnet" ]; then
-            red "For some reason, IPv6 enabled docker bridge network won't work"
-            red "with IPv6 subnets that have a size equal to or less than"
-            red "the size of allocated host device $ipv6_dev's subnet when"
-            red "multiple interfaces are added" 
-            red "- The subnet of network $network: $network_ipv6_cidr"
-            red "- IP configurations:"
-            red "`show_ipv6_settings`"
-            red "- Type ip addr del $ipv6_network_cidr dev $ipv6_dev"
-            red "  for manual IPv6 interface removal"
+            filtered_addr="$(grep -v ::1 <<< "$network_ipv6_addr" | grep -v fe80 | grep -v fd00 | echo)"
+            if [ "$filtered_addr" != "" ]; then
+              red "For some reason, IPv6 enabled docker bridge network won't work"
+              red "with IPv6 subnets that have a size equal to or less than"
+              red "the size of allocated host device $ipv6_dev's subnet when"
+              red "multiple interfaces are presented" 
+              red "- The subnet of network $network: $network_ipv6_cidr"
+              red "- IP configurations:"
+              red "`show_ipv6_settings`"
+              red "- Type ip addr del $ipv6_network_cidr dev $ipv6_dev"
+              red "  or $0 --rm"
+              red "  for manual IPv6 interface removal, if following commands failed"
+            fi
           fi
         fi
         set -e
