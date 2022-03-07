@@ -13,7 +13,8 @@ red () {
 }
 
 urandom () {
-  cat /dev/urandom | head -c $1 | hexdump -e '"%x"'
+  # cat /dev/urandom | head -c $1 | hexdump -e '"%x"'
+  tr -dc A-Za-z0-9 </dev/urandom | head -c $1
 }
 
 if [[ -f /etc/redhat-release ]]; then
@@ -396,7 +397,7 @@ EOF
 
   readonly CONFIG_USERNAME=clash
   readonly CONFIG_FILENAME="$PROFILE_NAME $local_addr"
-  readonly CONFIG_PASSWORD="${PASSWORD:-$(urandom 6)}"
+  readonly CONFIG_PASSWORD="${PASSWORD:-$(urandom 8)}"
   readonly CONFIG_PASSWORD_BCRYPTED=$(docker run caddy/caddy:2.4.0-alpine caddy hash-password -algorithm "bcrypt" -plaintext "$CONFIG_PASSWORD")
 
   cat > .env <<EOF
@@ -663,7 +664,7 @@ EOF
   fi
 
   readonly CONFIG_USERNAME=${USERNAME:-$(urandom 2)}
-  readonly CONFIG_PASSWORD=${PASSWORD:-$(urandom 4)}
+  readonly CONFIG_PASSWORD=${PASSWORD:-$(urandom 6)}
   readonly CONFIG_PASSWORD_BCRYPTED=$(docker run caddy/caddy:2.4.0-alpine caddy hash-password -algorithm "bcrypt" -plaintext "$CONFIG_PASSWORD")
 
   cat > "$ENV_FILE" <<EOF

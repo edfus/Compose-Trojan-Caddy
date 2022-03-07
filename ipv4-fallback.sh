@@ -46,7 +46,6 @@ if [ "$caddy_network_exists" == "true" ]; then
   green "Creating Trojan config..."
   jq -s add ./trojan/config/config.json <(cat <<EOF
 {
-  "local_addr": "0.0.0.0",
   "tcp": {
     "prefer_ipv4": true,
     "no_delay": true,

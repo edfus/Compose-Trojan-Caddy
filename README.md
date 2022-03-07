@@ -21,6 +21,7 @@ chmod +x index.sh
 Tested on Ubuntu 20.04 LTS as root
 
 https://github.com/moby/moby/issues/43296
+https://github.com/trojan-gfw/trojan/issues/628
 
 IPv6 address rotation for outgoing requests:
 ```bash
