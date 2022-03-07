@@ -764,7 +764,7 @@ while [[ $# -gt 0 ]]; do
       shift # past value
       ;;
     -h|--help)
-      sed -n '/POSITIONAL_ARGS=\(\)/,$p' $0
+      sed -n '/POSITIONAL_ARGS=\(\)/,$p' "$0"
       exit 0
       ;;
     -*|--*)

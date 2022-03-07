@@ -26,6 +26,39 @@ elif cat /proc/version | grep -Eqi "centos|red hat|redhat"; then
   PKGMANAGER="yum"
 fi
 
+POSITIONAL_ARGS=()
+
+RM=
+ADD=
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -r|--rm|--del|-d|del|rm|--rm-prev-only)
+      RM=YES
+      shift # past argument
+      ;;
+    -a|--add|add|--add-only)
+      ADD=YES
+      shift # past argument
+      ;;
+    -h|--help)
+      awk '/^POSITIONAL_ARGS=\(\)/{flag=1;next}/-h|--help)/{flag=0}flag' "$0"
+      exit 0
+      ;;
+    -*|--*)
+      echo "Unknown option $1"
+      exit 1
+      ;;
+    *)
+      POSITIONAL_ARGS+=("$1") # save positional arg
+      shift # past argument
+      ;;
+  esac
+done
+
+# restore positional parameters
+set -- "${POSITIONAL_ARGS[@]}"
+
 get_ipv6_cidr () {
   ip -6 addr | awk '/inet6/{print $2}' | grep -v ^::1 | grep -v ^fe80 | grep -v ^fd00 | awk -F'/' '
     NR==1 || $2<max_block_size {max_block_size=$2; line=$1"/"$2}
@@ -125,6 +158,12 @@ else
   ipv6_network_previous_cidr="$ipv6_network_cidr"
 fi
 
+if [ "$RM" == "YES" ]; then
+  echo "+ ip addr del $ipv6_network_previous_cidr dev $ipv6_dev"
+  ip addr del "$ipv6_network_previous_cidr" dev "$ipv6_dev"
+  exit $?
+fi
+
 IFS=/ read ipv6_cidr_addr ipv6_cidr_subnet <<< "$ipv6_range"
 ipv6_network_addr=`random_ipv6_address_from "$ipv6_cidr_addr" "$ipv6_cidr_subnet"`
 ipv6_network_cidr="$ipv6_network_addr/$ipv6_cidr_subnet"
@@ -132,7 +171,7 @@ ipv6_network_cidr="$ipv6_network_addr/$ipv6_cidr_subnet"
 cat >"$envfile" <<EOF
 ipv6_dev=${ipv6_dev:-eth0}
 ipv6_range=$ipv6_range
-ipv6_network_cidr=$ipv6_network_cidr
+ipv6_network_cidr=$( [ "$ADD" == "YES" ] && echo "$ipv6_network_previous_cidr" || echo "$ipv6_network_cidr" ) 
 EOF
 printf '=%.0s' $(seq 1 $(tput cols))
 blue "$(cat "$envfile")"
@@ -140,12 +179,12 @@ green "$(show_ipv6_settings)"
 
 set +e
 
-if [ "$ipv6_network_previous_cidr" != "" ]; then
+if [ "$ADD" != "YES" ] && [ "$ipv6_network_previous_cidr" != "" ]; then
   echo "+ ip addr del $ipv6_network_previous_cidr dev $ipv6_dev"
-  ip addr del "$ipv6_network_previous_cidr" dev $ipv6_dev
+  ip addr del "$ipv6_network_previous_cidr" dev "$ipv6_dev"
 fi
 echo "+ ip addr add $ipv6_network_cidr dev $ipv6_dev"
-ip addr add "$ipv6_network_cidr" dev $ipv6_dev
+ip addr add "$ipv6_network_cidr" dev "$ipv6_dev"
 
 set -e
 blue "$(show_ipv6_settings)"
