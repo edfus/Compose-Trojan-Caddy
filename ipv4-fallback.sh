@@ -28,6 +28,34 @@ warn () {
   return 1
 }
 
+POSITIONAL_ARGS=()
+
+BUILD=
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -b|--build|--rebuild|--force-rebuild)
+      BUILD=YES
+      shift # past argument
+      ;;
+    -h|--help)
+      awk '/^POSITIONAL_ARGS=\(\)/{flag=1;next}/-h|--help)/{flag=0}flag' "$0"
+      exit 0
+      ;;
+    -*|--*)
+      echo "Unknown option $1"
+      exit 1
+      ;;
+    *)
+      POSITIONAL_ARGS+=("$1") # save positional arg
+      shift # past argument
+      ;;
+  esac
+done
+
+# restore positional parameters
+set -- "${POSITIONAL_ARGS[@]}"
+
 docker network inspect caddy >/dev/null 2>&1
 caddy_network_exists=`[ $? == 0 ] && echo "true" || echo "false"`
 
@@ -127,6 +155,10 @@ networks:
   caddy:
     external: true
 EOF
+  # additional_options="$( [ "$BUILD" == "YES" ] && echo "--build" || /bin/true )"
+  if [ "$BUILD" == "YES" ]; then
+    docker-compose -p "trojan-caddy-ipv4" -f ./trojan-ipv4.yml --env-file /dev/null down
+  fi
   docker-compose -p "trojan-caddy-ipv4" -f ./trojan-ipv4.yml --env-file /dev/null up -d
   if [ $? != 0 ]; then
     docker-compose -p "trojan-caddy-ipv4" -f ./trojan-ipv4.yml --env-file /dev/null down
