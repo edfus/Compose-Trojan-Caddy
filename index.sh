@@ -14,7 +14,7 @@ red () {
 
 urandom () {
   # cat /dev/urandom | head -c $1 | hexdump -e '"%x"'
-  tr -dc A-Za-z0-9 </dev/urandom | head -c $1
+  tr -dc A-Za-z0-9 </dev/urandom | head -c $(( $1 * 2 ))
 }
 
 if [[ -f /etc/redhat-release ]]; then
@@ -112,6 +112,7 @@ function up () {
   if [ $dig_rtcode != 0 ]; then
     $PKGMANAGER -y install dnsutils
     $PKGMANAGER -y install bind-utils
+    $PKGMANAGER -y install bind9-utils
     real_addr=`dig +short "$DOMAIN_NAME"`
     dig_rtcode=$?
   fi
@@ -198,7 +199,11 @@ EOF
         ipv6_network_prefix=124 # Digital ocean droplet
       else
         if [ "${ipv6_network_prefix}" -ge 112 ]; then
-          ipv6_network_prefix=$ipv6_cidr_subnet
+          if [ "${ipv6_cidr_subnet}" -lt 112 ]; then
+            ipv6_network_prefix=$(( $ipv6_cidr_subnet + 16 )) #NOTE
+          else
+            ipv6_network_prefix=$ipv6_cidr_subnet
+          fi
         else
           ipv6_network_prefix=$(( $ipv6_network_prefix + 16 )) #NOTE
         fi
@@ -215,15 +220,10 @@ EOF
 
       echo "+ docker network create --ipv6 --subnet $ipv6_range caddy"
       docker network create --ipv6 --subnet "$ipv6_range" caddy > /dev/null
-      echo "+ docker run --rm --network caddy curlimages/curl curl -s -m 5 icanhazip.com"
-    else
-      caddy_ipv6_cidr="`docker network inspect caddy | jq -c '(.[0].IPAM.Config[] | select(.Subnet | contains(":")).Subnet)'`"
-      # stripping double quotes
-      caddy_ipv6_cidr="${caddy_ipv6_cidr%\"}"
-      caddy_ipv6_cidr="${caddy_ipv6_cidr#\"}"
+      echo "+ docker run --rm --network caddy curlimages/curl curl -s -6 -m 5 icanhazip.com"
     fi
 
-    ipv6_addr_result=`docker run --rm --network caddy curlimages/curl curl -s -m 5 icanhazip.com`
+    ipv6_addr_result=`docker run --rm --network caddy curlimages/curl curl -s -6 -m 5 icanhazip.com`
     if [ "$ipv6_addr_result" == "" ]; then
       red "+ docker run --rm --network caddy curlimages/curl curl -s -m 5 icanhazip.com"
       red "+ failed"
@@ -234,6 +234,11 @@ EOF
       red "`ip -6 addr | grep global | grep -v ::1 | grep -v fe80 | grep -v fd00`"
       return 1
     fi
+    caddy_ipv6_cidr="`docker network inspect caddy | jq -c '(.[0].IPAM.Config[] | select(.Subnet | contains(":")).Subnet)'`"
+    # stripping double quotes
+    caddy_ipv6_cidr="${caddy_ipv6_cidr%\"}"
+    caddy_ipv6_cidr="${caddy_ipv6_cidr#\"}" 
+
     echo "IPv6 subnet assigned: $caddy_ipv6_cidr"
     echo "IPv6 address in containers: $ipv6_addr_result"
 
@@ -378,7 +383,8 @@ rules:
 hosts:
   # https://github.com/curl/curl/wiki/DNS-over-HTTPS
   # https://en.wikipedia.org/wiki/Public_recursive_name_server
-  $([ "$ipv6_enabled" == "true" ] && echo "# ")$DOMAIN_NAME: $local_addr
+  # $([ "$ipv6_enabled" == "true" ] && echo "# ")$DOMAIN_NAME: $local_addr
+  $DOMAIN_NAME: $local_addr
   # dns.google: 8.8.8.8
   # dns-unfiltered.adguard.com: 94.140.14.140
   # sandbox.opendns.com: 208.67.222.2
@@ -499,8 +505,8 @@ EOF
       archivebox config --set YOUTUBEDL_ARGS='["--write-description", "--write-info-json", "--write-annotations", "--write-thumbnail", "--no-call-home", "--write-sub", "--all-subs", "--write-auto-sub", "--convert-subs=srt", "--yes-playlist", "--continue", "--ignore-errors", "--geo-bypass", "--add-metadata", "--max-filesize=500m", "--sub-lang=en"]'
       green "======================="
       blue "USER: $CONFIG_USERNAME"
-      blue "PASSWD: ${CONFIG_PASSWORD}"
-      blue "TROJAN PASSWD: ${TROJAN_PASSWORD}"
+      blue "PASSWORD: ${CONFIG_PASSWORD}"
+      blue "TROJAN PASSWORD: ${TROJAN_PASSWORD}"
       blue "Config files are available at https://$CONFIG_USERNAME:${CONFIG_PASSWORD}@${DOMAIN_NAME}/.config/clash.yml"
       green "======================="
       return
@@ -516,8 +522,8 @@ EOF
   
   green "======================="
   blue "USER: $CONFIG_USERNAME"
-  blue "PASSWD: ${CONFIG_PASSWORD}"
-  blue "TROJAN PASSWD: ${TROJAN_PASSWORD}"
+  blue "PASSWORD: ${CONFIG_PASSWORD}"
+  blue "TROJAN PASSWORD: ${TROJAN_PASSWORD}"
   blue "Config files are available at https://$CONFIG_USERNAME:${CONFIG_PASSWORD}@${DOMAIN_NAME}/.config/clash.yml"
   green "======================="
 }
@@ -694,7 +700,7 @@ EOF
 
   green "======================="
   blue "USER: $CONFIG_USERNAME"
-  blue "PASSWD: ${CONFIG_PASSWORD}"
+  blue "PASSWORD: ${CONFIG_PASSWORD}"
   blue "Config files are available at https://$CONFIG_USERNAME:${CONFIG_PASSWORD}@${DOMAIN_NAME}/.profiles?code=vanilla"
   green "======================="
 
@@ -705,9 +711,11 @@ EOF
 }
 
 function down () {
+  set +e
   caddy_backends=`docker ps -qf "network=caddy"`
   if [ "$caddy_backends" == "" ]; then
     docker-compose down
+    docker network rm caddy
     return
   fi
   for backend in $caddy_backends; do

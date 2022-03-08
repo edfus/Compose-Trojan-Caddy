@@ -30,6 +30,7 @@ POSITIONAL_ARGS=()
 
 RM=
 ADD=
+SHOW=
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -39,6 +40,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     -a|--add|add|--add-only)
       ADD=YES
+      shift # past argument
+      ;;
+    -s|--show|show)
+      SHOW=YES
       shift # past argument
       ;;
     -h|--help)
@@ -70,6 +75,11 @@ show_ipv6_settings () {
   ip -6 addr | grep global | grep -v ::1 | grep -v fe80 | grep -v fd00
 }
 
+if [ "$SHOW" == "YES" ]; then
+  show_ipv6_settings
+  exit $?
+fi
+
 random_ipv6_address_from () {
   ipv6_cidr_addr=$1
   ipv6_cidr_subnet=$2
@@ -94,6 +104,7 @@ print(':'.join(generated_hex[i:i+4] for i in range(0, len(generated_hex), 4)))
     "$PKGMANAGER" install -y python3
     random_ipv6_address_from $1 $2 true
     return $?
+
     ipv6_addr_split=`awk -F'::' '{for(i=1;i<=NF;i++){print $i}}'  <<< "$ipv6_cidr_addr"`
     IFS=$'\n' read ipv6_network_addr ipv6_trailing_addr <<< "$ipv6_addr_split"
     ipv6_addr_exploded="$ipv6_network_addr:0:0:0:0:0:0:0:0:0:0:0:0:0:0"
