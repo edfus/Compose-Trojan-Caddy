@@ -12,8 +12,11 @@ red () {
   echo -e "\033[31m\033[01m$1\033[0m"
 }
 
+urandom_lc () {
+  cat /dev/urandom | head -c $1 | hexdump -e '"%x"'
+}
+
 urandom () {
-  # cat /dev/urandom | head -c $1 | hexdump -e '"%x"'
   tr -dc A-Za-z0-9 </dev/urandom | head -c $(( $1 * 2 ))
 }
 
@@ -255,7 +258,7 @@ EOF
   fi
 
   green "Generating a good random password..."
-  readonly TROJAN_PASSWORD="$(urandom 12)"
+  TROJAN_PASSWORD="$(urandom 12)"
 
   green "Creating Trojan config..."
   mkdir -p ./trojan/config
@@ -310,7 +313,7 @@ EOF
   fi
   DISCONTINUATION_DATE=$(date "+%s" -d "$DISCONTINUATION_DATE")
   
-  read -e -i "${DOH_PATH:-/$(urandom 4)}" -p "$(blue 'Enter the DoH URI path: ')" DOH_PATH 
+  read -e -i "${DOH_PATH:-/$(urandom_lc 4)}" -p "$(blue 'Enter the DoH URI path: ')" DOH_PATH 
   DOH_PATH="$(echo "$DOH_PATH" | sed -r 's/^\/*([^\/])/\/\1/')"
 
   mkdir -p ./caddy/config
@@ -401,10 +404,10 @@ dns:
     geoip: false
 EOF
 
-  readonly CONFIG_USERNAME=clash
-  readonly CONFIG_FILENAME="$PROFILE_NAME $local_addr"
-  readonly CONFIG_PASSWORD="${PASSWORD:-$(urandom 8)}"
-  readonly CONFIG_PASSWORD_BCRYPTED=$(docker run caddy/caddy:2.4.0-alpine caddy hash-password -algorithm "bcrypt" -plaintext "$CONFIG_PASSWORD")
+  CONFIG_USERNAME=clash
+  CONFIG_FILENAME="$PROFILE_NAME $local_addr"
+  CONFIG_PASSWORD="${PASSWORD:-$(urandom 8)}"
+  CONFIG_PASSWORD_BCRYPTED=$(docker run caddy/caddy:2.4.0-alpine caddy hash-password -algorithm "bcrypt" -plaintext "$CONFIG_PASSWORD")
 
   cat > .env <<EOF
 DOMAIN_NAME=$DOMAIN_NAME
@@ -432,14 +435,22 @@ EOF
   fi
 
   if [ -f "./docker-proxy.yml" ]; then
-    if ! [ "$ipv6_enabled" == "true" ]; then
-      read -p "$(blue 'Set up an Archive Box decoy site? (Y/n) ')" yn
-      [ -z "${yn}" ] && yn="n"
+    if [ "$ipv6_enabled" != "true" ]; then
+      read -e -i "n" -p "$(blue 'Set up an Archive Box decoy site? (Y/n) ')" decoy
+      [ -z "${decoy}" ] && decoy="n"
+      [[ $decoy == [Yy] ]] && dynamic_proxy="y" || dynamic_proxy="n"
     else
-      yn="y"
+      # ipv6
+      dynamic_proxy="y"
+      if ! [ -f "./archivebox.yml" ]; then
+        read -e -i "y" -p "$(blue 'Set up an Archive Box decoy site? (Y/n) ')" decoy
+        [ -z "${decoy}" ] && decoy="y"
+      else
+        decoy="y"
+      fi
     fi
     
-    if [[ $yn == [Yy] ]]; then
+    if [[ $dynamic_proxy == [Yy] ]]; then
       test -f "./docker-compose.yml" && mv "./docker-compose.yml" "./docker-compose.yml.bak"
       cp "./docker-proxy.yml" "./docker-compose.yml"
       green "Starting docker containers..."
@@ -451,16 +462,17 @@ EOF
         docker-compose -p "trojan-caddy" --env-file .env down
         docker-compose -p "trojan-caddy" --env-file .env up -d
       fi 
-      read -e -i "n" -p "$(blue 'Any URL for scheduled regular imports? ')" yn
-      [ -z "${yn}" ] && yn="n"
-      if [[ $yn == [Nn] ]]; then
-        ENABLE_SCHEDULE=/bin/false
-        VAR_ARCHIVE_TARGET=""
-      else
-        ENABLE_SCHEDULE=
-        VAR_ARCHIVE_TARGET="$yn"
-      fi   
-cat>./archivebox.yml<<EOF
+      if [[ $decoy == [Yy] ]]; then
+        read -e -i "n" -p "$(blue 'Any URL for scheduled regular imports? ')" yn
+        [ -z "${yn}" ] && yn="n"
+        if [[ $yn == [Nn] ]]; then
+          ENABLE_SCHEDULE=/bin/false
+          VAR_ARCHIVE_TARGET=""
+        else
+          ENABLE_SCHEDULE=
+          VAR_ARCHIVE_TARGET="$yn"
+        fi   
+        cat>./archivebox.yml<<EOF
 version: '3.9'
 services:
   archivebox:
@@ -495,14 +507,15 @@ networks:
   caddy:
     external: true
 EOF
-      docker-compose -p "caddy-archivebox" -f ./archivebox.yml --env-file /dev/null run archivebox init --setup
-      docker-compose -p "caddy-archivebox" -f ./archivebox.yml --env-file /dev/null up -d
-      if [ $? != 0 ]; then
-        docker-compose -p "caddy-archivebox" -f ./archivebox.yml --env-file /dev/null down
+        docker-compose -p "caddy-archivebox" -f ./archivebox.yml --env-file /dev/null run archivebox init --setup
         docker-compose -p "caddy-archivebox" -f ./archivebox.yml --env-file /dev/null up -d
+        if [ $? != 0 ]; then
+          docker-compose -p "caddy-archivebox" -f ./archivebox.yml --env-file /dev/null down
+          docker-compose -p "caddy-archivebox" -f ./archivebox.yml --env-file /dev/null up -d
+        fi
+        docker exec $(docker ps | grep archivebox[-_]archivebox | awk '{ print $1 }') \
+        archivebox config --set YOUTUBEDL_ARGS='["--write-description", "--write-info-json", "--write-annotations", "--write-thumbnail", "--no-call-home", "--write-sub", "--all-subs", "--write-auto-sub", "--convert-subs=srt", "--yes-playlist", "--continue", "--ignore-errors", "--geo-bypass", "--add-metadata", "--max-filesize=500m", "--sub-lang=en"]'
       fi
-      docker exec $(docker ps | grep archivebox[-_]archivebox | awk '{ print $1 }') \
-      archivebox config --set YOUTUBEDL_ARGS='["--write-description", "--write-info-json", "--write-annotations", "--write-thumbnail", "--no-call-home", "--write-sub", "--all-subs", "--write-auto-sub", "--convert-subs=srt", "--yes-playlist", "--continue", "--ignore-errors", "--geo-bypass", "--add-metadata", "--max-filesize=500m", "--sub-lang=en"]'
       green "======================="
       blue "USER: $CONFIG_USERNAME"
       blue "PASSWORD: ${CONFIG_PASSWORD}"
@@ -669,9 +682,9 @@ EOF
     fi
   fi
 
-  readonly CONFIG_USERNAME=${USERNAME:-$(urandom 2)}
-  readonly CONFIG_PASSWORD=${PASSWORD:-$(urandom 6)}
-  readonly CONFIG_PASSWORD_BCRYPTED=$(docker run caddy/caddy:2.4.0-alpine caddy hash-password -algorithm "bcrypt" -plaintext "$CONFIG_PASSWORD")
+  CONFIG_USERNAME=${USERNAME:-$(urandom_lc 2)}
+  CONFIG_PASSWORD=${PASSWORD:-$(urandom 6)}
+  CONFIG_PASSWORD_BCRYPTED=$(docker run caddy/caddy:2.4.0-alpine caddy hash-password -algorithm "bcrypt" -plaintext "$CONFIG_PASSWORD")
 
   cat > "$ENV_FILE" <<EOF
 PROFILES_OUTPUT=${PROFILES_OUTPUT:+$(readlink -f "$PROFILES_OUTPUT")}

@@ -10,6 +10,8 @@ services:
       - ./ssl:/ssl
       - ./trojan/wait-for-certificates.sh:/wait-for-certificates.sh
     working_dir: /config
+    environment:
+      DOMAIN_NAME: $DOMAIN_NAME
     labels:
       - caddy=http://:4433
       - caddy.0_redir=/.config /.config/
