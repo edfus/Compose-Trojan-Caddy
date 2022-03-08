@@ -10,6 +10,8 @@ services:
       - ./ssl:/ssl
       - ./trojan/wait-for-certificates.sh:/wait-for-certificates.sh
     working_dir: /config
+    environment:
+      DOMAIN_NAME: $DOMAIN_NAME
     command: ["sh", "/wait-for-certificates.sh", "trojan", "config.json"]
     networks:
       - frontend
