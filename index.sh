@@ -147,8 +147,8 @@ function up () {
     red "IPv6 is not available, falling back to IPv4 only"
     network_interface="0.0.0.0"
   elif [ "$ipv6_cidr" == "" ]; then
-    red "Can't find a public IPv6 address on this machine,"
-    red "but IPv6 is enabled."
+    red "IPv6 is enabled on this machine,"
+    red "but not a single public IPv6 address can be found."
     red "Falling back to IPv4 only."
     network_interface="0.0.0.0"
   else
@@ -681,14 +681,20 @@ WRANGLER_CONFIG=${WRANGLER_CONFIG:+$(readlink -f "$WRANGLER_CONFIG")}
 USERNAME="$CONFIG_USERNAME"
 PASSWORD="$CONFIG_PASSWORD"
 PASSWD_BCRYPTED=$CONFIG_PASSWORD_BCRYPTED
-EXPIRE=${EXPIRE:-$DISCONTINUATION_DATE}
 EOF
 
   set -o allexport
   test -f .env &&  source .env
-  source "$ENV_FILE"
   set +o allexport
 
+  cat >> "$ENV_FILE" <<EOF
+EXPIRE=${EXPIRE:-$DISCONTINUATION_DATE}
+EOF
+
+  set -o allexport
+  source "$ENV_FILE"
+  set +o allexport
+  
   docker-compose -p "$REPOSITORY" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d >/dev/null
   if [ $? != 0 ]; then
     docker-compose -p "$REPOSITORY" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" down
