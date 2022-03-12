@@ -461,7 +461,7 @@ EOF
       if [ $? != 0 ]; then
         docker-compose -p "trojan-caddy" --env-file .env down
         docker-compose -p "trojan-caddy" --env-file .env up -d
-      fi 
+      fi
       if [[ $decoy == [Yy] ]]; then
         read -e -i "n" -p "$(blue 'Any URL for scheduled regular imports? ')" yn
         [ -z "${yn}" ] && yn="n"
@@ -513,7 +513,7 @@ EOF
           docker-compose -p "caddy-archivebox" -f ./archivebox.yml --env-file /dev/null down
           docker-compose -p "caddy-archivebox" -f ./archivebox.yml --env-file /dev/null up -d
         fi
-        docker exec $(docker ps | grep archivebox[-_]archivebox | awk '{ print $1 }') \
+        docker exec $(docker ps | grep caddy[-_]archivebox[-_]archivebox | awk '{ print $1 }') \
         archivebox config --set YOUTUBEDL_ARGS='["--write-description", "--write-info-json", "--write-annotations", "--write-thumbnail", "--no-call-home", "--write-sub", "--all-subs", "--write-auto-sub", "--convert-subs=srt", "--yes-playlist", "--continue", "--ignore-errors", "--geo-bypass", "--add-metadata", "--max-filesize=500m", "--sub-lang=en"]'
       fi
       green "======================="
@@ -522,6 +522,10 @@ EOF
       blue "TROJAN PASSWORD: ${TROJAN_PASSWORD}"
       blue "Config files are available at https://$CONFIG_USERNAME:${CONFIG_PASSWORD}@${DOMAIN_NAME}/.config/clash.yml"
       green "======================="
+      
+      # just-in-case reload
+      docker exec $(docker ps | grep trojan[-_]caddy[-_]trojan | awk '{ print $1 }' | head -n 1) \
+        kill -s SIGHUP 1
       return
     fi
   fi
@@ -539,6 +543,9 @@ EOF
   blue "TROJAN PASSWORD: ${TROJAN_PASSWORD}"
   blue "Config files are available at https://$CONFIG_USERNAME:${CONFIG_PASSWORD}@${DOMAIN_NAME}/.config/clash.yml"
   green "======================="
+  
+  docker exec $(docker ps | grep trojan[-_]caddy[-_]trojan | awk '{ print $1 }' | head -n 1) \
+    kill -s SIGHUP 1
 }
 
 function install_docker () {  
@@ -641,7 +648,7 @@ networks:
     external: true
 EOF
 
-  if [ "$PROFILES_SRC" == "" ]; then
+  if [ "$PROFILES_SRC" == "" ] || ! [ -f  "$PROFILES_SRC" ]; then
     if ! [ -f profiles.js ]; then
       cat>profiles.js<<EOF
 export default [
@@ -653,7 +660,7 @@ EOF
     PROFILES_SRC=profiles.js
   fi
 
-  if [ "$INJECTIONS_SRC" == "" ]; then
+  if [ "$INJECTIONS_SRC" == "" ] || ! [ -f  "$INJECTIONS_SRC" ]; then
     if ! [ -f injections.yml ]; then
       cat>injections.yml<<EOF
 Microsoft Network Connectivity Status Indicator:
@@ -668,7 +675,7 @@ EOF
     INJECTIONS_SRC=injections.yml
   fi
 
-  if [ "$WRANGLER_CONFIG" == "" ]; then
+  if [ "$WRANGLER_CONFIG" == "" ] || ! [ -f  "$WRANGLER_CONFIG" ]; then
     if [ -f wrangler.toml ]; then
       WRANGLER_CONFIG=wrangler.toml
     elif [ -f "$REPOSITORY/wrangler.toml" ]; then

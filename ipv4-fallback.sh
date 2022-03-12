@@ -170,6 +170,10 @@ EOF
   blue "PASSWD: ${PASSWORD}"
   blue "Config files are available at https://$USERNAME:${PASSWORD}@${DOMAIN_NAME}/.config/clash.yml"
   green "======================="
+
+  # reload
+  docker exec $(docker ps | grep trojan[-_]caddy[-_]ipv4[-_]trojan | awk '{ print $1 }' | head -n 1) \
+    kill -s SIGHUP 1
 else
   warn
   exit $?
