@@ -228,14 +228,22 @@ EOF
 
     ipv6_addr_result=`docker run --rm --network caddy curlimages/curl curl -s -6 -m 5 icanhazip.com`
     if [ "$ipv6_addr_result" == "" ]; then
-      red "+ docker run --rm --network caddy curlimages/curl curl -s -m 5 icanhazip.com"
+      red "+ docker run --rm --network caddy curlimages/curl curl -s -6 -m 5 icanhazip.com"
       red "+ failed"
       red "`printf '=%.0s' $(seq 1 $(tput cols))`"
       red "`docker network inspect caddy`"
       red "`printf '=%.0s' $(seq 1 $(tput cols))`"
       red "+ IP configurations:"
-      red "`ip -6 addr | grep global | grep -v ::1 | grep -v fe80 | grep -v fd00`"
-      return 1
+      red "`ip -6 addr | grep global | grep -v '\s::1' | grep -v '\sfe80' | grep -v '\sfd00'`"
+      cyan "+ systemctl restart docker"
+      systemctl restart docker
+      cyan "+ docker run --rm --network caddy curlimages/curl curl -s -6 -m 5 icanhazip.com"
+      ipv6_addr_result=`docker run --rm --network caddy curlimages/curl curl -s -6 -m 5 icanhazip.com`
+      if [ "$ipv6_addr_result" == "" ]; then
+        red "+ docker run --rm --network caddy curlimages/curl curl -s -6 -m 5 icanhazip.com"
+        red "+ failed"
+        return 1
+      fi
     fi
     caddy_ipv6_cidr="`docker network inspect caddy | jq -c '(.[0].IPAM.Config[] | select(.Subnet | contains(":")).Subnet)'`"
     # stripping double quotes
@@ -340,13 +348,6 @@ proxy-groups:
     type: select
     proxies:
       - "$PROFILE_NAME"
-      - "Auto - UrlTest"
-  - name: "Auto - UrlTest"
-    type: url-test
-    proxies:
-      - "$PROFILE_NAME"
-    url: http://www.gstatic.com/generate_204
-    interval: "3600"
   - name: Quick UDP Internet Connections
     type: select
     proxies:

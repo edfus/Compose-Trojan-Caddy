@@ -72,7 +72,7 @@ get_ipv6_cidr () {
 }
 
 show_ipv6_settings () {
-  ip -6 addr | grep global | grep -v ::1 | grep -v fe80 | grep -v fd00
+  ip -6 addr | grep global | grep -v '\s::1' | grep -v '\sfe80' | grep -v '\sfd00'
 }
 
 if [ "$SHOW" == "YES" ]; then

@@ -18,7 +18,7 @@ chmod +x index.sh
 # ⬆️ when container aliases got messed up
 ```
 
-Tested on Ubuntu 20.04 LTS as root
+Tested on Ubuntu 20.04 LTS as root on multiple servers
 
 https://github.com/moby/moby/issues/43296
 https://github.com/trojan-gfw/trojan/issues/628
