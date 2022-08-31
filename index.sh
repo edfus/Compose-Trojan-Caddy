@@ -235,9 +235,9 @@ EOF
       red "`printf '=%.0s' $(seq 1 $(tput cols))`"
       red "+ IP configurations:"
       red "`ip -6 addr | grep global | grep -v '\s::1' | grep -v '\sfe80' | grep -v '\sfd00'`"
-      cyan "+ systemctl restart docker"
+      blue "+ systemctl restart docker"
       systemctl restart docker
-      cyan "+ docker run --rm --network caddy curlimages/curl curl -s -6 -m 5 icanhazip.com"
+      blue "+ docker run --rm --network caddy curlimages/curl curl -s -6 -m 5 icanhazip.com"
       ipv6_addr_result=`docker run --rm --network caddy curlimages/curl curl -s -6 -m 5 icanhazip.com`
       if [ "$ipv6_addr_result" == "" ]; then
         red "+ docker run --rm --network caddy curlimages/curl curl -s -6 -m 5 icanhazip.com"
@@ -314,7 +314,7 @@ EOF
   read -e -i "${PROFILE_NAME:-$DOMAIN_NAME}" -p "$(blue 'Enter the profile name: ')" PROFILE_NAME
   set +e
   EXPIRE_TIMESTAMP="${EXPIRE:+@$EXPIRE}"
-  read -e -i "$(date "+%m/%d/%Y" -d "${EXPIRE_TIMESTAMP:-3 months}")" -p "$(blue 'Any determined expiration date? [%m/%d/%Y] ')" DISCONTINUATION_DATE 
+  read -e -i "$(date "+%m/%d/%Y" -d "${EXPIRE_TIMESTAMP:-3 months}")" -p "$(blue 'Any determined due date? [%m/%d/%Y] ')" DISCONTINUATION_DATE 
   date -d "${DISCONTINUATION_DATE:-??}" "+%m/%d/%Y" >/dev/null 2>&1
   if [ $? != 0 ]; then
     DISCONTINUATION_DATE=$(date "+%m/%d/%Y" -d "2 years")
