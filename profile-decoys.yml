@@ -1,0 +1,69 @@
+version: '3.9'
+
+services:
+  goscrape:
+    build: ./cloner
+    profiles: [ "decoy-goscrape" ]
+    labels:
+    command: >
+      goscrape "$$GOSCRAPE_HOST" $$GOSCRAPE_ARGS
+    volumes:
+      - ./cloner/sites/${GOSCRAPE_HOST:-"nic.eu.org"}:/sites/${GOSCRAPE_HOST:-"nic.eu.org"}
+    environment:
+      GOSCRAPE_ARGS: ${GOSCRAPE_ARGS:-"--depth 3 --imagequality 4"}
+      GOSCRAPE_HOST: ${GOSCRAPE_HOST:-"nic.eu.org"}
+
+  goscrape-server:
+    image: lipanski/docker-static-website:2.1.0
+    expose:
+      - 3000
+    networks:
+      - caddy
+    profiles: [ "decoy-goscrape" ]
+    labels:
+      caddy: "http://:8080"
+      caddy.reverse_proxy: "/* http://goscrape-server:3000"
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+    volumes:
+      - ./cloner/sites/${GOSCRAPE_HOST:-"nic.eu.org"}:/home/static/:ro
+    restart: unless-stopped
+
+  archivebox:
+    image: archivebox/archivebox:sha-bf432d4
+    profiles: [ "decoy-archivebox" ]
+    command: server --quick-init 0.0.0.0:8000
+    expose:
+      - 8000
+    environment:
+      - ALLOWED_HOSTS=*
+      - MEDIA_MAX_SIZE=750m
+    volumes:
+      - ./archivebox-data:/data
+    networks:
+      - caddy
+    restart: unless-stopped
+    labels:
+      caddy: "http://:8080"
+      # https://github.com/lucaslorentz/caddy-docker-proxy/issues/208#issuecomment-762333788
+      caddy.reverse_proxy: http://archivebox:8000
+  
+  scheduler:
+    image: archivebox/archivebox:sha-bf432d4
+    profiles: [ "decoy-archivebox" ]
+    command: $${ENABLE_SCHEDULE} schedule --foreground --every=month --depth=0 '${VAR_ARCHIVE_TARGET}'
+    environment:
+      - USE_COLOR=True
+      - SHOW_PROGRESS=False
+      - ENABLE_SCHEDULE=${ENABLE_SCHEDULE:-"sleep infinity; /bin/false"}
+    networks:
+      - caddy
+    restart: "no"
+    volumes:
+      - ./archivebox-data:/data
+
+networks:
+  caddy:
+    external: true
