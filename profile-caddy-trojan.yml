@@ -1,0 +1,63 @@
+version: '3.9'
+
+services:
+  trojan:
+    image: trojangfw/trojan:latest
+    ports:
+      - "443:443"
+    volumes:
+      - ./trojan/config:/config
+      - ./ssl:/ssl
+      - ./trojan/wait-for-certificates.sh:/wait-for-certificates.sh
+    working_dir: /config
+    environment:
+      DOMAIN_NAME: ${DOMAIN_NAME:-localhost}
+    labels:
+      - caddy_1=${DOMAIN_NAME:-localhost}
+      - caddy_1.tls.issuer=acme
+      - caddy_1.tls.issuer.disable_tlsalpn_challenge=
+    command: ["sh", "/wait-for-certificates.sh", "trojan", "config.json"]
+    networks:
+      - caddy
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped
+
+  caddy:
+    image: lucaslorentz/caddy-docker-proxy:2.4.0-alpine
+    container_name: caddy
+    ports:
+      - "80:80"
+    expose:
+      - 8080
+    environment:
+      - CADDY_INGRESS_NETWORKS=caddy
+    networks:
+      - caddy
+    labels:
+      caddy_0.servers.protocol.allow_h2c: 
+      caddy_0.log.output: stdout
+      caddy_0.log.format: filter
+      caddy_0.log.format.wrap: json
+      caddy_0.log.format.fields.request>headers>Authorization: delete
+      caddy_0.log.format.fields.common_log: delete
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - caddy_data:/data       # named volume
+      - caddy_config:/config   # named volume
+    restart: unless-stopped
+
+
+networks:
+  caddy:
+    external: true
+
+volumes:
+  caddy_data:
+  caddy_config:

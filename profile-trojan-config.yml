@@ -1,0 +1,35 @@
+version: '3.9'
+
+services:
+  trojan-config-server:
+    image: lipanski/docker-static-website:2.1.0
+    expose:
+      - 3000
+    networks:
+      - caddy
+    labels:
+      - caddy=http://:8080
+      - caddy.0_redir=/.config /.config/
+      - caddy.1_route=/.config/*
+      - caddy.1_route.0_basicauth=bcrypt
+      - caddy.1_route.0_basicauth.${USERNAME}="${PASSWD_BCRYPTED}"
+      - caddy.1_route.@clashrequests.file.try_policy=first_exist
+      - caddy.1_route.@clashrequests.file.root="/var/www/${DOMAIN_NAME:-localhost}"
+      - caddy.1_route.@clashrequests.header_regexp=ua User-Agent "(?i)^clash"
+      - caddy.1_route.1_header="@clashrequests"
+      - caddy.1_route.1_header.Content-Disposition="attachment; filename=${FILENAME:-Config}"
+      - caddy.1_route.1_header.Content-Type=application/x-yaml
+      - caddy.1_route.1_header.Profile-Update-Interval=12
+      - caddy.1_route.1_header.Subscription-Userinfo="expire=${EXPIRE:-2274253409}"
+      - caddy.1_route.2_reverse_proxy="* http://trojan-config-server:3000"
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+    volumes:
+      - ./caddy/config:/home/static/.config:ro
+    restart: unless-stopped
+
+networks:
+  caddy:
+    external: true

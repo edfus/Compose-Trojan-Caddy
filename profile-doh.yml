@@ -1,0 +1,24 @@
+version: '3.9'
+
+services:
+  doh:
+    image: satishweb/doh-server:alpine
+    expose:
+      - 8053
+    labels:
+      caddy: "http://:8080"
+      caddy.reverse_proxy: "${DOH_PATH:-/dns-query}* http://doh:8053"
+    environment:
+      UPSTREAM_DNS_SERVER: "udp:8.8.8.8:53"
+      DOH_HTTP_PREFIX: "${DOH_PATH}"
+      DOH_SERVER_LISTEN: ":8053"
+      DOH_SERVER_TIMEOUT: "10"
+      DOH_SERVER_TRIES: "3"
+      DOH_SERVER_VERBOSE: "false"
+    networks:
+      - caddy
+    restart: unless-stopped
+
+networks:
+  caddy:
+    external: true
