@@ -28,7 +28,7 @@ services:
     ports:
       - "80:80"
     expose:
-      - 4433
+      - 8080
     environment:
       - DOMAIN_HOSTNAME=${DOMAIN_NAME}
       - PASSWD_BCRYPTED=${PASSWD_BCRYPTED}

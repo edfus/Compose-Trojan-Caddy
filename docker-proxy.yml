@@ -13,7 +13,7 @@ services:
     environment:
       DOMAIN_NAME: $DOMAIN_NAME
     labels:
-      - caddy=http://:4433
+      - caddy=http://:8080
       - caddy.0_redir=/.config /.config/
       - caddy.1_route=/.config/*
       - caddy.1_route.0_basicauth=bcrypt
@@ -43,7 +43,7 @@ services:
     ports:
       - "80:80"
     expose:
-      - 4433
+      - 8080
     environment:
       - CADDY_INGRESS_NETWORKS=caddy
     networks:
@@ -75,7 +75,7 @@ services:
     expose:
       - 8053
     labels:
-      caddy: "http://:4433"
+      caddy: "http://:8080"
       caddy.reverse_proxy: "${DOH_PATH:-/dns-query}* http://doh:8053"
     environment:
       UPSTREAM_DNS_SERVER: "udp:8.8.8.8:53"

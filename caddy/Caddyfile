@@ -14,7 +14,7 @@
 	}
 }
 
-http://:4433 {
+http://:8080 {
 	encode gzip
 	route {
 		reverse_proxy {$DOH_PATH:/dns-query}* http://doh:8053

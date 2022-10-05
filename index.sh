@@ -276,7 +276,7 @@ EOF
     "local_addr": "$network_interface",
     "local_port": 443,
     "remote_addr": "caddy",
-    "remote_port": 4433,
+    "remote_port": 8080,
     "password": [
         "$TROJAN_PASSWORD"
     ],
@@ -490,7 +490,7 @@ services:
       - caddy
     restart: unless-stopped
     labels:
-      caddy: "http://:4433"
+      caddy: "http://:8080"
       # https://github.com/lucaslorentz/caddy-docker-proxy/issues/208#issuecomment-762333788
       caddy.reverse_proxy: http://archivebox:8000
   scheduler:
@@ -639,7 +639,7 @@ services:
       - ${INJECTIONS_SRC:-./injections.yml}:/app/injections.yml
       - ${WRANGLER_CONFIG:-./wrangler.toml}:/app/wrangler.toml
     labels:
-      - caddy=http://:4433
+      - caddy=http://:8080
       - caddy.1_route=/.profiles
       - caddy.1_route.0_basicauth=bcrypt
       - caddy.1_route.0_basicauth.${USERNAME}="${PASSWD_BCRYPTED}"
