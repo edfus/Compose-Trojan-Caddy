@@ -50,6 +50,32 @@ elif cat /proc/version | grep -Eqi "centos|red hat|redhat"; then
   SYSTEMPWD="/usr/lib/systemd/system/"
 fi
 
+function install_docker () {  
+  docker -v >/dev/null 2>&1
+  if [ $? != 0 ]; then
+    curl -fsSL https://get.docker.com -o get-docker.sh && sh get-docker.sh
+    systemctl start docker
+    systemctl enable docker
+    usermod -aG docker $USER
+  fi
+}
+
+function install_docker_compose () {
+  set +e
+  docker-compose -v >/dev/null 2>&1
+  if [ $? != 0 ]; then
+    $PKGMANAGER -y install python-pip
+    pip install --upgrade pip
+    pip install docker-compose
+
+    if [ $? != 0 ]; then
+      curl -L "https://github.com/docker/compose/releases/download/v2.2.3/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+      chmod +x /usr/local/bin/docker-compose
+      ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
+    fi
+  fi
+}
+
 get_ipv6_cidr () {
   ip -6 addr | awk '/inet6/{print $2}' | grep -v ^::1 | grep -v ^fe80 | grep -v ^fd00 | awk -F'/' '
     NR==1 || $2<max_block_size {max_block_size=$2; line=$1"/"$2}
@@ -57,15 +83,59 @@ get_ipv6_cidr () {
   '
 }
 
+compose_cmd () {
+  docker-compose -p "$1" -f "$1.yml" --env-file ".$1.env" $2 $3
+}
+
+compose_up () {
+  compose_cmd "$1" "$2" "up -d"
+  if [ $? != 0 ]; then
+    compose_cmd "$1" "$2" "down"
+    compose_cmd "$1" "$2" "up -d"
+  fi
+}
+
+ls_all_envfiles () {
+  ls .env .*.env
+}
+
+stat_files () {
+  stat -c "%U:%G %a %n" $1
+}
+
+check_env () {
+  if [ -f .profiles.env.stat ]; then
+    echo "$(stat_files `ls_all_envfiles`)" > ".tmp.profiles.env.stat"
+    green "Comparing status of all environment files..."
+    cmp .profiles.env.stat ".tmp.profiles.env.stat"
+    if [ $? != "0" ]; then
+      green "====================="
+      green "before: (.profiles.env.stat)"
+      green "$(cat .profiles.env.stat)"
+      green
+      blue  "========V.S.=========="
+      red "after: (.tmp.profiles.env.stat)"
+      red "$(cat .tmp.profiles.env.stat)"
+      red
+      read -e -p "$(blue 'Press Enter to continue at your own risk.')" 
+      mv .profiles.env.stat .profiles.env.stat.bak
+      mv .tmp.profiles.env.stat .profiles.env.stat
+      chmod 0744 .profiles.env.stat
+    else 
+      rm .tmp.profiles.env.stat
+    fi
+  fi
+}
+
 function up () {
   set +e
-  # docker-compose -p "trojan-caddy" down
-  # docker-compose -p "caddy-archivebox" down
-  # docker-compose down
 
+  check_env
+
+  all_envfiles="`ls_all_envfiles`"
   # https://stackoverflow.com/a/30969768
   set -o allexport
-  [ -f .env ] && source .env
+  for envfile in $all_envfiles; do source "$envfile"; done
   set +o allexport
 
   netstat --version >/dev/null 2>&1
@@ -311,17 +381,36 @@ EOF
     }
 }
 EOF
-  read -e -i "${PROFILE_NAME:-$DOMAIN_NAME}" -p "$(blue 'Enter the profile name: ')" PROFILE_NAME
+
+  cat > .profile-caddy-trojan.env <<EOF
+DOMAIN_NAME=$DOMAIN_NAME
+EOF
+
+  green "Spinning up the reverse proxy..."
   set +e
-  EXPIRE_TIMESTAMP="${EXPIRE:+@$EXPIRE}"
-  read -e -i "$(date "+%m/%d/%Y" -d "${EXPIRE_TIMESTAMP:-3 months}")" -p "$(blue 'Any determined due date? [%m/%d/%Y] ')" DISCONTINUATION_DATE 
-  date -d "${DISCONTINUATION_DATE:-??}" "+%m/%d/%Y" >/dev/null 2>&1
-  if [ $? != 0 ]; then
-    DISCONTINUATION_DATE=$(date "+%m/%d/%Y" -d "2 years")
-  fi
-  DISCONTINUATION_DATE=$(date "+%s" -d "$DISCONTINUATION_DATE")
+  [ "`docker network inspect caddy >/dev/null 2>&1; echo $?`" != 0 ] \
+  && docker network create caddy
   
-  read -e -i "${DOH_PATH:-/$(urandom_lc 4)}" -p "$(blue 'Enter the DoH URI path: ')" DOH_PATH 
+  compose_up "profile-caddy-trojan"
+
+  green "Starting docker services..."
+
+# --- Config
+
+  read -e -i "${CONFIG_PROFILE_NAME:-$DOMAIN_NAME}" -p "$(blue 'Enter the profile name: ')" CONFIG_PROFILE_NAME
+  set +e
+  DUE_DATE_TIMESTAMP="${CONFIG_DUE_DATE:+@$CONFIG_DUE_DATE}"
+  read -e -i "$(date "+%m/%d/%Y" -d "${DUE_DATE_TIMESTAMP:-3 months}")" -p "$(blue 'Any determined due date? [%m/%d/%Y] ')" CONFIG_DUE_DATE 
+  # Test if input is valid 
+  date -d "${CONFIG_DUE_DATE:-"No input is given."}" "+%m/%d/%Y" >/dev/null
+  if [ $? != 0 ]; then
+    CONFIG_DUE_DATE=$(date "+%m/%d/%Y" -d "2 years")
+    red "Due date has been set to dummy date $CONFIG_DUE_DATE"
+  fi
+
+  CONFIG_DUE_DATE=$(date "+%s" -d "${CONFIG_DUE_DATE}")
+  
+  read -e -i "${DOH_PATH:-/$(urandom_lc 4)}" -p "$(blue 'Enter the DoH URI path (Leave empty to disable): ')" DOH_PATH 
   DOH_PATH="$(echo "$DOH_PATH" | sed -r 's/^\/*([^\/])/\/\1/')"
 
   mkdir -p ./caddy/config
@@ -335,7 +424,7 @@ external-controller: 127.0.0.1:9090
 experimental:
   ignore-resolve-fail: true
 proxies:
-  - name: "$PROFILE_NAME"
+  - name: "$CONFIG_PROFILE_NAME"
     type: trojan
     server: $DOMAIN_NAME
     port: 443
@@ -347,7 +436,7 @@ proxy-groups:
   - name: Proxy
     type: select
     proxies:
-      - "$PROFILE_NAME"
+      - "$CONFIG_PROFILE_NAME"
   - name: Quick UDP Internet Connections
     type: select
     proxies:
@@ -356,7 +445,7 @@ proxy-groups:
   - name: Microsoft Network Connectivity Status Indicator
     type: select
     proxies:
-      - "$PROFILE_NAME"
+      - "$CONFIG_PROFILE_NAME"
       - DIRECT
 script:
   shortcuts:
@@ -387,13 +476,42 @@ rules:
 hosts:
   # https://github.com/curl/curl/wiki/DNS-over-HTTPS
   # https://en.wikipedia.org/wiki/Public_recursive_name_server
-  # $([ "$ipv6_enabled" == "true" ] && echo "# ")$DOMAIN_NAME: $local_addr
   $DOMAIN_NAME: $local_addr
   # dns.google: 8.8.8.8
   # dns-unfiltered.adguard.com: 94.140.14.140
   # sandbox.opendns.com: 208.67.222.2
   # dns10.quad9.net: 9.9.9.10
   # security-filter-dns.cleanbrowsing.org: 185.228.168.9
+
+EOF
+
+  CONFIG_USERNAME=clash
+  CONFIG_FILENAME="$CONFIG_PROFILE_NAME $local_addr"
+  CONFIG_PASSWORD="${CONFIG_PASSWORD:-$(urandom 8)}"
+  CONFIG_PASSWORD_BCRYPTED=$(docker run caddy/caddy:2.4.0-alpine caddy hash-password -algorithm "bcrypt" -plaintext "$CONFIG_PASSWORD")
+
+  cat > .env <<EOF
+CONFIG_PASSWORD=$CONFIG_PASSWORD
+EOF
+
+  cat > .profile-trojan-config.env <<EOF
+CONFIG_USERNAME=$CONFIG_USERNAME
+CONFIG_PROFILE_NAME="$CONFIG_PROFILE_NAME"
+CONFIG_FILENAME="$CONFIG_FILENAME"
+CONFIG_DUE_DATE=$CONFIG_DUE_DATE
+CONFIG_PASSWD_BCRYPTED=$CONFIG_PASSWORD_BCRYPTED
+EOF
+
+  compose_up "profile-trojan-config"
+
+#--- DoH
+
+  cat > .profile-doh.env <<EOF
+DOH_PATH=$DOH_PATH
+EOF
+
+  if [ "$DOH_PATH" != "" ]; then 
+    cat >>./caddy/config/clash.yml<<EOF
 dns:
   enable: true
   listen: 0.0.0.0:53
@@ -404,176 +522,74 @@ dns:
   fallback-filter:
     geoip: false
 EOF
-
-  CONFIG_USERNAME=clash
-  CONFIG_FILENAME="$PROFILE_NAME $local_addr"
-  CONFIG_PASSWORD="${PASSWORD:-$(urandom 8)}"
-  CONFIG_PASSWORD_BCRYPTED=$(docker run caddy/caddy:2.4.0-alpine caddy hash-password -algorithm "bcrypt" -plaintext "$CONFIG_PASSWORD")
-
-  cat > .env <<EOF
-DOMAIN_NAME=$DOMAIN_NAME
-DOH_PATH=$DOH_PATH
-USERNAME=$CONFIG_USERNAME
-PROFILE_NAME="$PROFILE_NAME"
-FILENAME="$CONFIG_FILENAME"
-EXPIRE=$DISCONTINUATION_DATE
-PASSWORD=$CONFIG_PASSWORD
-PASSWD_BCRYPTED=$CONFIG_PASSWORD_BCRYPTED
-EOF
-
-  set -o allexport
-  source .env
-  set +o allexport
-
-  if ! [ -f "./docker-proxy.yml"  ] && [ "$ipv6_enabled" == "true" ]; then
-    red "Can't find ./docker-proxy.yml while IPv6 is enabled"
-    red "Please check the integrity of $PWD"
-    read -p "$(red 'Type y to continue the script: ')" yn
-    [ -z "${yn}" ] && yn="n"
-    if [[ $yn != [Yy] ]]; then
-      return 1
-    fi
+    compose_up "profile-doh"
   fi
 
-  if [ -f "./docker-proxy.yml" ]; then
-    if [ "$ipv6_enabled" != "true" ]; then
-      read -e -i "n" -p "$(blue 'Set up an Archive Box decoy site? (Y/n) ')" decoy
-      [ -z "${decoy}" ] && decoy="n"
-      [[ $decoy == [Yy] ]] && dynamic_proxy="y" || dynamic_proxy="n"
-    else
-      # ipv6
-      dynamic_proxy="y"
-      if ! [ -f "./archivebox.yml" ]; then
-        read -e -i "y" -p "$(blue 'Set up an Archive Box decoy site? (Y/n) ')" decoy
-        [ -z "${decoy}" ] && decoy="y"
-      else
-        decoy="y"
-      fi
-    fi
-    
-    if [[ $dynamic_proxy == [Yy] ]]; then
-      test -f "./docker-compose.yml" && mv "./docker-compose.yml" "./docker-compose.yml.bak"
-      cp "./docker-proxy.yml" "./docker-compose.yml"
-      green "Starting docker containers..."
-      set +e
-      [ "`docker network inspect caddy >/dev/null 2>&1; echo $?`" != 0 ] \
-      && docker network create caddy
-      docker-compose -p "trojan-caddy" --env-file .env up -d
-      if [ $? != 0 ]; then
-        docker-compose -p "trojan-caddy" --env-file .env down
-        docker-compose -p "trojan-caddy" --env-file .env up -d
-      fi
-      if [[ $decoy == [Yy] ]]; then
-        read -e -i "n" -p "$(blue 'Any URL for scheduled regular imports? ')" yn
+#--- Decoys
+
+  read -e -i "y" -p "$(blue 'Set up a decoy site? (Y/n) ')" decoy
+  [ -z "${decoy}" ] && decoy="y"
+
+  if [[ $decoy == [Yy] ]]; then
+    read -e -i "1" -p "$(blue '1) Goscrape website copier 2) Archivebox')" choice
+
+    case $choice in
+      1) # Goscrape
+        read -e -i "${GOSCRAPE_HOST:-"nic.eu.org"}" -p "$(blue 'Web host to be cloned: ')" GOSCRAPE_HOST
+        [ -z "${GOSCRAPE_HOST}" ] && echo "An input is required" && exit 1
+        read -e -i "${GOSCRAPE_ARGS:-"--depth 3 --imagequality 4"}" -p "$(blue 'Arguments for Goscrape: ')" GOSCRAPE_ARGS
+       ;;
+      2) # Archivebox
+        read -e -i "${ARCHIVEBOX_SCHEDULE_ENABLE:-n}" -p "$(blue 'Any URL for scheduled regular imports? ')" yn
         [ -z "${yn}" ] && yn="n"
         if [[ $yn == [Nn] ]]; then
-          ENABLE_SCHEDULE=/bin/false
-          VAR_ARCHIVE_TARGET=""
+          ARCHIVEBOX_SCHEDULE_ENABLE="n"
+          ARCHIVEBOX_SCHEDULE_PRECEDING_CMD="sleep infinity; /bin/false"
         else
-          ENABLE_SCHEDULE=
-          VAR_ARCHIVE_TARGET="$yn"
-        fi   
-        cat>./archivebox.yml<<EOF
-version: '3.9'
-services:
-  archivebox:
-    image: archivebox/archivebox:sha-bf432d4
-    command: server --quick-init 0.0.0.0:8000
-    expose:
-      - 8000
-    environment:
-      - ALLOWED_HOSTS=*
-      - MEDIA_MAX_SIZE=750m
-    volumes:
-      - ./archivebox-data:/data
-    networks:
-      - caddy
-    restart: unless-stopped
-    labels:
-      caddy: "http://:8080"
-      # https://github.com/lucaslorentz/caddy-docker-proxy/issues/208#issuecomment-762333788
-      caddy.reverse_proxy: http://archivebox:8000
-  scheduler:
-    image: archivebox/archivebox:sha-bf432d4
-    command: ${ENABLE_SCHEDULE} schedule --foreground --every=month --depth=0 '${VAR_ARCHIVE_TARGET}'
-    environment:
-      - USE_COLOR=True
-      - SHOW_PROGRESS=False
-    networks:
-      - caddy
-    restart: "no"
-    volumes:
-      - ./archivebox-data:/data
-networks:
-  caddy:
-    external: true
-EOF
-        docker-compose -p "caddy-archivebox" -f ./archivebox.yml --env-file /dev/null run archivebox init --setup
-        docker-compose -p "caddy-archivebox" -f ./archivebox.yml --env-file /dev/null up -d
-        if [ $? != 0 ]; then
-          docker-compose -p "caddy-archivebox" -f ./archivebox.yml --env-file /dev/null down
-          docker-compose -p "caddy-archivebox" -f ./archivebox.yml --env-file /dev/null up -d
+          ARCHIVEBOX_SCHEDULE_ENABLE="$yn"
+          ARCHIVEBOX_SCHEDULE_PRECEDING_CMD=""
+          ARCHIVEBOX_SCHEDULE_TARGET="$yn"
+          read -e -i "${ARCHIVEBOX_SCHEDULE_ARGS:-"--every=month --depth=0"}" -p "$(blue 'Schedule configuration parameters: ')" ARCHIVEBOX_SCHEDULE_ARGS
         fi
-        docker exec $(docker ps | grep caddy[-_]archivebox[-_]archivebox | awk '{ print $1 }') \
-        archivebox config --set YOUTUBEDL_ARGS='["--write-description", "--write-info-json", "--write-annotations", "--write-thumbnail", "--no-call-home", "--write-sub", "--all-subs", "--write-auto-sub", "--convert-subs=srt", "--yes-playlist", "--continue", "--ignore-errors", "--geo-bypass", "--add-metadata", "--max-filesize=500m", "--sub-lang=en"]'
-      fi
-      green "======================="
-      blue "USER: $CONFIG_USERNAME"
-      blue "PASSWORD: ${CONFIG_PASSWORD}"
-      blue "TROJAN PASSWORD: ${TROJAN_PASSWORD}"
-      blue "Config files are available at https://$CONFIG_USERNAME:${CONFIG_PASSWORD}@${DOMAIN_NAME}/.config/clash.yml"
-      green "======================="
-      
-      # just-in-case reload
-      docker exec $(docker ps | grep trojan[-_]caddy[-_]trojan | awk '{ print $1 }' | head -n 1) \
-        kill -s SIGHUP 1
-      return
-    fi
+      ;;
+      *) echo "Unrecognized selection: $choice" return 1 ;;
+    esac
+
+      cat > .profile-decoys.env <<EOF
+GOSCRAPE_HOST="$GOSCRAPE_HOST"
+GOSCRAPE_ARGS="$GOSCRAPE_ARGS"
+ARCHIVEBOX_SCHEDULE_ENABLE="$ARCHIVEBOX_SCHEDULE_ENABLE"
+ARCHIVEBOX_SCHEDULE_PRECEDING_CMD="$ARCHIVEBOX_SCHEDULE_PRECEDING_CMD"
+ARCHIVEBOX_SCHEDULE_TARGET="$ARCHIVEBOX_SCHEDULE_TARGET"
+ARCHIVEBOX_SCHEDULE_ARGS="$ARCHIVEBOX_SCHEDULE_ARGS"
+EOF
+    case $choice in
+      1) # Goscrape
+        compose_up "profile-decoys" "--profile decoy-goscrape"
+       ;;
+      2) # Archivebox
+        compose_cmd "profile-decoys" "--profile decoy-archivebox" "run archivebox init --setup"
+        compose_up "profile-decoys" "--profile decoy-archivebox"
+      ;;
+      *) echo "Unrecognized selection: $choice" return 1 ;;
+    esac
   fi
 
-  green "Starting docker containers..."
-  docker-compose --env-file .env up -d
-  if [ $? != 0 ]; then
-    docker-compose --env-file .env down
-    docker-compose --env-file .env up -d
-  fi
-  
   green "======================="
   blue "USER: $CONFIG_USERNAME"
   blue "PASSWORD: ${CONFIG_PASSWORD}"
   blue "TROJAN PASSWORD: ${TROJAN_PASSWORD}"
   blue "Config files are available at https://$CONFIG_USERNAME:${CONFIG_PASSWORD}@${DOMAIN_NAME}/.config/clash.yml"
   green "======================="
-  
-  docker exec $(docker ps | grep trojan[-_]caddy[-_]trojan | awk '{ print $1 }' | head -n 1) \
-    kill -s SIGHUP 1
+
+  check_env
+  all_envfiles="`ls_all_envfiles`"
+  chmod 0700 $all_envfiles
+  echo "$(stat_files $all_envfiles)" > .profiles.env.stat
+  chmod 0744 .profiles.env.stat
 }
 
-function install_docker () {  
-  docker -v >/dev/null 2>&1
-  if [ $? != 0 ]; then
-    curl -fsSL https://get.docker.com -o get-docker.sh && sh get-docker.sh
-    systemctl start docker
-    systemctl enable docker
-    usermod -aG docker $USER
-  fi
-}
 
-function install_docker_compose () {
-  set +e
-  docker-compose -v >/dev/null 2>&1
-  if [ $? != 0 ]; then
-    $PKGMANAGER -y install python-pip
-    pip install --upgrade pip
-    pip install docker-compose
-
-    if [ $? != 0 ]; then
-      curl -L "https://github.com/docker/compose/releases/download/v2.2.3/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-      chmod +x /usr/local/bin/docker-compose
-      ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
-    fi
-  fi
-}
 
 function consolidate () {
   git --version > /dev/null 2>&1

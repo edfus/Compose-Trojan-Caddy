@@ -53,14 +53,16 @@ services:
   scheduler:
     image: archivebox/archivebox:sha-bf432d4
     profiles: [ "decoy-archivebox" ]
-    command: $${ENABLE_SCHEDULE} schedule --foreground --every=month --depth=0 '${VAR_ARCHIVE_TARGET}'
+    command: $${ARCHIVEBOX_SCHEDULE_ENABLE} schedule --foreground $$ARCHIVEBOX_SCHEDULE_ARGS '$${ARCHIVEBOX_SCHEDULE_TARGET}'
     environment:
       - USE_COLOR=True
       - SHOW_PROGRESS=False
-      - ENABLE_SCHEDULE=${ENABLE_SCHEDULE:-"sleep infinity; /bin/false"}
+      - ARCHIVEBOX_SCHEDULE_ENABLE=${ARCHIVEBOX_SCHEDULE_ENABLE:-"sleep infinity; /bin/false"}
+      - ARCHIVEBOX_SCHEDULE_TARGET=${ARCHIVEBOX_SCHEDULE_TARGET}
+      - ARCHIVEBOX_SCHEDULE_ARGS=${ARCHIVEBOX_SCHEDULE_ARGS:-"--foreground --every=month --depth=0"}
     networks:
       - caddy
-    restart: "no"
+    restart: "unless-stopped"
     volumes:
       - ./archivebox-data:/data
 

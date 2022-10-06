@@ -1,0 +1,31 @@
+version: '3.9'
+services:
+  clash-profiles:
+    expose:
+      - "80"
+    restart: unless-stopped
+    build: .
+    environment:
+      NODE_ENV: production
+      EXPIRE: ${EXPIRE}
+    networks:
+      - caddy
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+    volumes:
+      - ./external-rulesets:/app/external-rulesets
+      - ${PROFILES_OUTPUT:-./profiles}:/app/output
+      - ${PROFILES_SRC:-./profiles.js}:/app/profiles.js
+      - ${INJECTIONS_SRC:-./injections.yml}:/app/injections.yml
+      - ${WRANGLER_CONFIG:-./wrangler.toml}:/app/wrangler.toml
+    labels:
+      - caddy=http://:8080
+      - caddy.1_route=/.profiles
+      - caddy.1_route.0_basicauth=bcrypt
+      - caddy.1_route.0_basicauth.${USERNAME}="${CONFIG_PASSWD_BCRYPTED}"
+      - caddy.1_route.reverse_proxy=http://clash-profiles:80
+networks:
+  caddy:
+    external: true
