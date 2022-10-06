@@ -399,16 +399,16 @@ EOF
 
   read -e -i "${CONFIG_PROFILE_NAME:-$DOMAIN_NAME}" -p "$(blue 'Enter the profile name: ')" CONFIG_PROFILE_NAME
   set +e
-  DUE_DATE_TIMESTAMP="${CONFIG_DUE_DATE:+@$CONFIG_DUE_DATE}"
-  read -e -i "$(date "+%m/%d/%Y" -d "${DUE_DATE_TIMESTAMP:-3 months}")" -p "$(blue 'Any determined due date? [%m/%d/%Y] ')" CONFIG_DUE_DATE 
+  POSSIBLE_DUE_TIMESTAMP="${CONFIG_DUE_TIMESTAMP:+@$CONFIG_DUE_TIMESTAMP}"
+  read -e -i "$(date "+%m/%d/%Y" -d "${POSSIBLE_DUE_TIMESTAMP:-3 months}")" -p "$(blue 'Any determined due date? [%m/%d/%Y] ')" DUE_DATE 
   # Test if input is valid 
-  date -d "${CONFIG_DUE_DATE:-"No input is given."}" "+%m/%d/%Y" >/dev/null
+  date -d "${DUE_DATE:-"No input is given."}" "+%m/%d/%Y" >/dev/null
   if [ $? != 0 ]; then
-    CONFIG_DUE_DATE=$(date "+%m/%d/%Y" -d "2 years")
-    red "Due date has been set to dummy date $CONFIG_DUE_DATE"
+    DUE_DATE=$(date "+%m/%d/%Y" -d "2 years")
+    red "Due date has been set to dummy date $DUE_DATE"
   fi
 
-  CONFIG_DUE_DATE=$(date "+%s" -d "${CONFIG_DUE_DATE}")
+  CONFIG_DUE_TIMESTAMP=$(date "+%s" -d "${DUE_DATE}")
   
   read -e -i "${DOH_PATH:-/$(urandom_lc 4)}" -p "$(blue 'Enter the DoH URI path (Leave empty to disable): ')" DOH_PATH 
   DOH_PATH="$(echo "$DOH_PATH" | sed -r 's/^\/*([^\/])/\/\1/')"
@@ -498,7 +498,7 @@ EOF
 CONFIG_USERNAME=$CONFIG_USERNAME
 CONFIG_PROFILE_NAME="$CONFIG_PROFILE_NAME"
 CONFIG_FILENAME="$CONFIG_FILENAME"
-CONFIG_DUE_DATE=$CONFIG_DUE_DATE
+CONFIG_DUE_TIMESTAMP=$CONFIG_DUE_TIMESTAMP
 CONFIG_PASSWORD_BCRYPTED=$CONFIG_PASSWORD_BCRYPTED
 EOF
 
