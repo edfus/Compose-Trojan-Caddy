@@ -12,7 +12,7 @@ services:
       - caddy.0_redir=/.config /.config/
       - caddy.1_route=/.config/*
       - caddy.1_route.0_basicauth=bcrypt
-      - caddy.1_route.0_basicauth.${CONFIG_USERNAME}="${CONFIG_PASSWD_BCRYPTED}"
+      - caddy.1_route.0_basicauth.${CONFIG_USERNAME}="${CONFIG_PASSWORD_BCRYPTED}"
       - caddy.1_route.1_header.Content-Disposition="attachment; filename=${CONFIG_FILENAME:-Config}"
       - caddy.1_route.1_header.Content-Type=application/x-yaml
       - caddy.1_route.1_header.Profile-Update-Interval=12
