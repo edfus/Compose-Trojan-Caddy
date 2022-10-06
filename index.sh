@@ -88,10 +88,10 @@ compose_cmd () {
 }
 
 compose_up () {
-  compose_cmd "$1" "$2" "up -d"
+  compose_cmd "$1" "$2" "up -d $3"
   if [ $? != 0 ]; then
     compose_cmd "$1" "$2" "down"
-    compose_cmd "$1" "$2" "up -d"
+    compose_cmd "$1" "$2" "up -d $3"
   fi
 }
 
@@ -488,7 +488,7 @@ EOF
   CONFIG_USERNAME=clash
   CONFIG_FILENAME="$CONFIG_PROFILE_NAME $local_addr"
   CONFIG_PASSWORD="${CONFIG_PASSWORD:-$(urandom 8)}"
-  CONFIG_PASSWORD_BCRYPTED=$(docker run caddy/caddy:2.4.0-alpine caddy hash-password -algorithm "bcrypt" -plaintext "$CONFIG_PASSWORD")
+  CONFIG_PASSWORD_BCRYPTED=$(docker run --rm caddy/caddy:2.4.0-alpine caddy hash-password -algorithm "bcrypt" -plaintext "$CONFIG_PASSWORD")
 
   cat > .env <<EOF
 CONFIG_PASSWORD=$CONFIG_PASSWORD
@@ -568,7 +568,7 @@ EOF
         compose_up "profile-decoys" "--profile decoy-goscrape"
        ;;
       2) # Archivebox
-        compose_cmd "profile-decoys" "--profile decoy-archivebox" "run archivebox init --setup"
+        compose_cmd "profile-decoys" "--profile decoy-archivebox run" "archivebox init --setup"
         compose_up "profile-decoys" "--profile decoy-archivebox"
       ;;
       *) echo "Unrecognized selection: $choice" return 1 ;;
@@ -612,60 +612,22 @@ function consolidate () {
   fi
 
   if [ "`docker network inspect caddy >/dev/null 2>&1; echo $?`" != 0 ]; then
-    red "Unrecoverable error: can't find a pre-existing caddy network"
+    red "Unrecoverable error: can't find a pre-existing network named 'caddy'"
     red "If you are settng up a server dedicated to Trojan services,"
-    red "run this script again with switch --up on AND choose to set up"
-    red "an Archivebox decoy site or an IPv6 interface when prompted."
-    red ""
-    red "Or create a caddy dynamic reverse proxy network manually."
-    red "Refer to lucaslorentz/caddy-docker-proxy and docker-proxy.yml"
-    red "for details, if that's the case."
+    red "run this script again with switch --up"
+    red "Or create a lucaslorentz/caddy-docker-proxy network manually."
     return 1
   fi
 
-  COMPOSE_FILE="./$REPOSITORY/docker-compose.yml"
-  ENV_FILE="./$REPOSITORY/.env"
+  check_env
 
-  set +e
+  all_envfiles="`ls_all_envfiles`"
+  # https://stackoverflow.com/a/30969768
   set -o allexport
-  test -f "$ENV_FILE" && source "$ENV_FILE"
+  for envfile in $all_envfiles; do source "$envfile"; done
   set +o allexport
 
-  cat>"$COMPOSE_FILE"<<'EOF'
-version: '3.9'
-services:
-  clash-profiles:
-    expose:
-      - "80"
-    restart: unless-stopped
-    build: .
-    environment:
-      NODE_ENV: production
-      EXPIRE: ${EXPIRE}
-    networks:
-      - caddy
-    logging:
-      options:
-        max-size: "10m"
-        max-file: "3"
-    volumes:
-      - ./external-rulesets:/app/external-rulesets
-      - ${PROFILES_OUTPUT:-./profiles}:/app/output
-      - ${PROFILES_SRC:-./profiles.js}:/app/profiles.js
-      - ${INJECTIONS_SRC:-./injections.yml}:/app/injections.yml
-      - ${WRANGLER_CONFIG:-./wrangler.toml}:/app/wrangler.toml
-    labels:
-      - caddy=http://:8080
-      - caddy.1_route=/.profiles
-      - caddy.1_route.0_basicauth=bcrypt
-      - caddy.1_route.0_basicauth.${USERNAME}="${PASSWD_BCRYPTED}"
-      - caddy.1_route.reverse_proxy=http://clash-profiles:80
-networks:
-  caddy:
-    external: true
-EOF
-
-  if [ "$PROFILES_SRC" == "" ] || ! [ -f  "$PROFILES_SRC" ]; then
+  if [ "$CONSOLIDATION_PROFILES_SRC" == "" ] || ! [ -f  "$CONSOLIDATION_PROFILES_SRC" ]; then
     if ! [ -f profiles.js ]; then
       cat>profiles.js<<EOF
 export default [
@@ -674,10 +636,10 @@ export default [
 EOF
     fi
     nano profiles.js
-    PROFILES_SRC=profiles.js
+    CONSOLIDATION_PROFILES_SRC=profiles.js
   fi
 
-  if [ "$INJECTIONS_SRC" == "" ] || ! [ -f  "$INJECTIONS_SRC" ]; then
+  if [ "$CONSOLIDATION_INJECTIONS_SRC" == "" ] || ! [ -f  "$CONSOLIDATION_INJECTIONS_SRC" ]; then
     if ! [ -f injections.yml ]; then
       cat>injections.yml<<EOF
 Microsoft Network Connectivity Status Indicator:
@@ -689,78 +651,61 @@ Microsoft Network Connectivity Status Indicator:
 EOF
     fi
     nano injections.yml
-    INJECTIONS_SRC=injections.yml
+    CONSOLIDATION_INJECTIONS_SRC=injections.yml
   fi
 
-  if [ "$WRANGLER_CONFIG" == "" ] || ! [ -f  "$WRANGLER_CONFIG" ]; then
+  if [ "$CONSOLIDATION_WRANGLER_CONFIG" == "" ] || ! [ -f  "$CONSOLIDATION_WRANGLER_CONFIG" ]; then
     if [ -f wrangler.toml ]; then
-      WRANGLER_CONFIG=wrangler.toml
+      CONSOLIDATION_WRANGLER_CONFIG=wrangler.toml
     elif [ -f "$REPOSITORY/wrangler.toml" ]; then
-      WRANGLER_CONFIG="$REPOSITORY/wrangler.toml"
+      CONSOLIDATION_WRANGLER_CONFIG="$REPOSITORY/wrangler.toml"
     else
       # docker-compose -f "$COMPOSE_FILE" --env-file /dev/null run clash-profiles ./init-wrangler.sh
       chmod +x "./$REPOSITORY/init-wrangler.sh"
       "./$REPOSITORY/init-wrangler.sh"
-      WRANGLER_CONFIG="./$REPOSITORY/wrangler.toml"
-      # docker-compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" run clash-profiles wrangler config
+      CONSOLIDATION_WRANGLER_CONFIG="./$REPOSITORY/wrangler.toml"
     fi
   fi
 
-  CONFIG_USERNAME=${USERNAME:-$(urandom_lc 2)}
-  CONFIG_PASSWORD=${PASSWORD:-$(urandom 6)}
-  CONFIG_PASSWORD_BCRYPTED=$(docker run caddy/caddy:2.4.0-alpine caddy hash-password -algorithm "bcrypt" -plaintext "$CONFIG_PASSWORD")
+  CONSOLIDATION_ACCESS_USERNAME=${CONSOLIDATION_ACCESS_USERNAME:-$(urandom_lc 2)}
+  CONSOLIDATION_ACCESS_PASSWORD=${CONSOLIDATION_ACCESS_PASSWORD:-$(urandom 6)}
+  CONSOLIDATION_PASSWORD_BCRYPTED=$(docker run --rm caddy/caddy:2.4.0-alpine caddy hash-password -algorithm "bcrypt" -plaintext "$CONFIG_PASSWORD")
 
-  cat > "$ENV_FILE" <<EOF
-PROFILES_OUTPUT=${PROFILES_OUTPUT:+$(readlink -f "$PROFILES_OUTPUT")}
-PROFILES_SRC=$(readlink -f "$PROFILES_SRC")
-INJECTIONS_SRC=$(readlink -f "$INJECTIONS_SRC")
-WRANGLER_CONFIG=${WRANGLER_CONFIG:+$(readlink -f "$WRANGLER_CONFIG")}
-USERNAME="$CONFIG_USERNAME"
-PASSWORD="$CONFIG_PASSWORD"
-PASSWD_BCRYPTED=$CONFIG_PASSWORD_BCRYPTED
+  cat > ".profile-clash-consolidation.env" <<EOF
+CONSOLIDATION_PROFILES_OUTPUT=${CONSOLIDATION_PROFILES_OUTPUT:+$(readlink -f "$CONSOLIDATION_PROFILES_OUTPUT")}
+CONSOLIDATION_PROFILES_SRC=$(readlink -f "$CONSOLIDATION_PROFILES_SRC")
+CONSOLIDATION_INJECTIONS_SRC=$(readlink -f "$CONSOLIDATION_INJECTIONS_SRC")
+CONSOLIDATION_WRANGLER_CONFIG=${CONSOLIDATION_WRANGLER_CONFIG:+$(readlink -f "$CONSOLIDATION_WRANGLER_CONFIG")}
+CONSOLIDATION_ACCESS_USERNAME="$CONSOLIDATION_ACCESS_USERNAME"
+CONSOLIDATION_ACCESS_PASSWORD="$CONSOLIDATION_ACCESS_PASSWORD"
+CONSOLIDATION_PASSWORD_BCRYPTED=$CONSOLIDATION_PASSWORD_BCRYPTED
 EOF
 
-  set -o allexport
-  test -f .env &&  source .env
-  set +o allexport
-
-  cat >> "$ENV_FILE" <<EOF
-EXPIRE=${EXPIRE:-$DISCONTINUATION_DATE}
+  cat >> ".profile-clash-consolidation.env" <<EOF
+CONSOLIDATION_CUTOFF_TIMESTAMP=${CONFIG_DUE_TIMESTAMP:-$CONSOLIDATION_CUTOFF_TIMESTAMP}
 EOF
 
-  set -o allexport
-  source "$ENV_FILE"
-  set +o allexport
-  
-  docker-compose -p "$REPOSITORY" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up --build -d >/dev/null
-  if [ $? != 0 ]; then
-    docker-compose -p "$REPOSITORY" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" down
-    docker-compose -p "$REPOSITORY" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up --build -d
-  fi
+  compose_up "profile-clash-consolidation" "" "--build"
+
   if [ "$DOMAIN_NAME" == "" ]; then
-    read -e -i "$DOMAIN_NAME" -p "$(blue 'Enter the domain name: ')" DOMAIN_NAME
+    read -e -p "$(blue 'Enter the domain name: ')" DOMAIN_NAME
   fi
 
   green "======================="
-  blue "USER: $CONFIG_USERNAME"
-  blue "PASSWORD: ${CONFIG_PASSWORD}"
-  blue "Config files are available at https://$CONFIG_USERNAME:${CONFIG_PASSWORD}@${DOMAIN_NAME}/.profiles?code=vanilla"
+  blue "USERNAME: $CONSOLIDATION_ACCESS_USERNAME"
+  blue "PASSWORD: ${CONSOLIDATION_ACCESS_PASSWORD}"
+  blue "Config files are available at https://$CONSOLIDATION_ACCESS_USERNAME:${CONSOLIDATION_ACCESS_PASSWORD}@${DOMAIN_NAME}/.profiles?code=$(echo "TWFpbmxhbmQlMjBDaGluYQo=" | base64 -d)"
   green "======================="
 
-  wrangler_container=$(docker ps | grep clash | head -n 1  | awk '{ print $1 }')
-  docker exec -it "$wrangler_container" wrangler config
-  docker exec -it "$wrangler_container" wrangler publish
-  docker logs $(docker ps | grep clash | head -n 1 | awk '{ print $1 }') --follow
+  compose_cmd "profile-clash-consolidation" "exec -it clash-profiles" "wrangler config"
+  compose_cmd "profile-clash-consolidation" "exec -it clash-profiles" "wrangler publish"
+
+  compose_cmd "profile-clash-consolidation" "logs --follow clash-profiles"
 }
 
 function down () {
   set +e
   caddy_backends=`docker ps -qf "network=caddy"`
-  if [ "$caddy_backends" == "" ]; then
-    docker-compose down
-    docker network rm caddy
-    return
-  fi
   for backend in $caddy_backends; do
     docker network disconnect -f caddy $backend
     docker stop $backend && docker rm $backend
@@ -795,22 +740,22 @@ while [[ $# -gt 0 ]]; do
       shift # past argument
       ;;
     -i|--injections)
-      INJECTIONS_SRC="$2"
+      CONSOLIDATION_INJECTIONS_SRC="$2"
       shift # past argument
       shift # past value
       ;;
     -p|--profiles|--config)
-      PROFILES_SRC="$2"
+      CONSOLIDATION_PROFILES_SRC="$2"
       shift # past argument
       shift # past value
       ;;
     -w|--wranger|--wranger-config)
-      WRANGLER_CONFIG="$2"
+      CONSOLIDATION_WRANGLER_CONFIG="$2"
       shift # past argument
       shift # past value
       ;;
     -o|--output)
-      PROFILES_OUTPUT="$2"
+      CONSOLIDATION_PROFILES_OUTPUT="$2"
       shift # past argument
       shift # past value
       ;;

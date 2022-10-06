@@ -7,7 +7,7 @@ services:
     build: .
     environment:
       NODE_ENV: production
-      EXPIRE: ${EXPIRE}
+      EXPIRE: ${CONSOLIDATION_CUTOFF_TIMESTAMP}
     networks:
       - caddy
     logging:
@@ -16,15 +16,15 @@ services:
         max-file: "3"
     volumes:
       - ./external-rulesets:/app/external-rulesets
-      - ${PROFILES_OUTPUT:-./profiles}:/app/output
-      - ${PROFILES_SRC:-./profiles.js}:/app/profiles.js
-      - ${INJECTIONS_SRC:-./injections.yml}:/app/injections.yml
-      - ${WRANGLER_CONFIG:-./wrangler.toml}:/app/wrangler.toml
+      - ${CONSOLIDATION_PROFILES_OUTPUT:-./profiles}:/app/output
+      - ${CONSOLIDATION_PROFILES_SRC:-./profiles.js}:/app/profiles.js
+      - ${CONSOLIDATION_INJECTIONS_SRC:-./injections.yml}:/app/injections.yml
+      - ${CONSOLIDATION_WRANGLER_CONFIG:-./wrangler.toml}:/app/wrangler.toml
     labels:
       - caddy=http://:8080
       - caddy.1_route=/.profiles
       - caddy.1_route.0_basicauth=bcrypt
-      - caddy.1_route.0_basicauth.${USERNAME}="${CONFIG_PASSWD_BCRYPTED}"
+      - caddy.1_route.0_basicauth.${CONSOLIDATION_ACCESS_USERNAME}="${CONSOLIDATION_ACCESS_PASSWORD_BCRYPTED}"
       - caddy.1_route.reverse_proxy=http://clash-profiles:80
 networks:
   caddy:
