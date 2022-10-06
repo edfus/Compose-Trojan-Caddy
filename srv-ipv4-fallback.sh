@@ -113,7 +113,7 @@ EOF
         "name": .name + " IPv4",
         "type": .type,
         "server": .server,
-        "port": 4433,
+        "port": 56790,
         "password": .password,
         "udp": .udp,
         "alpn": .alpn
@@ -128,20 +128,20 @@ EOF
   mv ./caddy/config/clash.yml ./caddy/config/clash-v6.yml
   mv ./caddy/config/clash-v4.yml ./caddy/config/clash.yml
 
-  cat>./trojan-ipv4.yml<<EOF
+  cat>./profile-trojan-ipv4.yml<<EOF
 version: '3.9'
 services:
   trojan:
     image: trojangfw/trojan:latest
     ports:
-      - "4433:443"
+      - "56790:443"
     volumes:
       - ./trojan/config:/config
       - ./ssl:/ssl
     working_dir: /config
     labels:
-      - caddy=http://:4433
-      - caddy.@intruders.expression={http.request.port} == 4433
+      - caddy=http://:56790
+      - caddy.@intruders.expression={http.request.port} == 56790
       - caddy.redir=@intruders https://{http.request.host} permanent
     networks:
       - caddy
@@ -157,17 +157,17 @@ networks:
 EOF
   # additional_options="$( [ "$BUILD" == "YES" ] && echo "--build" || /bin/true )"
   if [ "$BUILD" == "YES" ]; then
-    docker-compose -p "trojan-caddy-ipv4" -f ./trojan-ipv4.yml --env-file /dev/null down
+    docker-compose -p "trojan-caddy-ipv4" -f ./profile-trojan-ipv4.yml --env-file /dev/null down
   fi
-  docker-compose -p "trojan-caddy-ipv4" -f ./trojan-ipv4.yml --env-file /dev/null up -d
+  docker-compose -p "trojan-caddy-ipv4" -f ./profile-trojan-ipv4.yml --env-file /dev/null up -d
   if [ $? != 0 ]; then
-    docker-compose -p "trojan-caddy-ipv4" -f ./trojan-ipv4.yml --env-file /dev/null down
-    docker-compose -p "trojan-caddy-ipv4" -f ./trojan-ipv4.yml --env-file /dev/null up -d
+    docker-compose -p "trojan-caddy-ipv4" -f ./profile-trojan-ipv4.yml --env-file /dev/null down
+    docker-compose -p "trojan-caddy-ipv4" -f ./profile-trojan-ipv4.yml --env-file /dev/null up -d
   fi
 
   green "======================="
   blue "USER: $USERNAME"
-  blue "PASSWD: ${PASSWORD}"
+  blue "PASSWORD: ${PASSWORD}"
   blue "Config files are available at https://$USERNAME:${PASSWORD}@${DOMAIN_NAME}/.config/clash.yml"
   green "======================="
 
