@@ -71,6 +71,32 @@ stat_files () {
   stat -c "%U:%G %a %n" $1
 }
 
+
+check_env () {
+  if [ -f .profiles.env.stat ]; then
+    echo "$(stat_files `ls_all_envfiles`)" > ".tmp.profiles.env.stat"
+    green "Comparing status of all environment files..."
+    cmp .profiles.env.stat ".tmp.profiles.env.stat"
+    if [ $? != "0" ]; then
+      green "====================="
+      green "before: (.profiles.env.stat)"
+      green "$(cat .profiles.env.stat)"
+      green
+      blue  "========V.S.=========="
+      red "after: (.tmp.profiles.env.stat)"
+      red "$(cat .tmp.profiles.env.stat)"
+      red
+      read -e -p "$(blue 'Press Enter to continue at your own risk.')" 
+      mv .profiles.env.stat .profiles.env.stat.bak
+      mv .tmp.profiles.env.stat .profiles.env.stat
+      chmod 0744 .profiles.env.stat
+    else 
+      rm .tmp.profiles.env.stat
+    fi
+  fi
+}
+
+
 function consolidate () {
   git --version > /dev/null 2>&1
   if [ $? != 0 ]; then
