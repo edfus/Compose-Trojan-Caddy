@@ -522,8 +522,9 @@ EOF
 
     case $choice in
       1) # Goscrape
-        read -e -i "${GOSCRAPE_HOST:-"nic.eu.org"}" -p "$(blue 'Web host to be cloned: ')" GOSCRAPE_HOST
+        read -e -i "${GOSCRAPE_HOST:-"nic.eu.org"}" -p "$(blue 'Web host to be cloned (only https is supported): ')" GOSCRAPE_HOST
         [ -z "${GOSCRAPE_HOST}" ] && echo "An input is required" && exit 1
+        [ ! -z "`echo -n ${GOSCRAPE_HOST} | grep :`" ] && echo "${GOSCRAPE_HOST}: Do not enter the protocol, type hostname only" && exit 1
         read -e -i "${GOSCRAPE_ARGS:-"--depth 3 --imagequality 4"}" -p "$(blue 'Arguments for Goscrape: ')" GOSCRAPE_ARGS
        ;;
       2) # Archivebox
