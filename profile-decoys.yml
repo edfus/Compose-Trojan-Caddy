@@ -4,8 +4,8 @@ services:
   goscrape:
     build: ./cloner
     profiles: [ "decoy-goscrape" ]
-    command: >
-      goscrape "$$GOSCRAPE_HOST" $$GOSCRAPE_ARGS
+    entrypoint: sh
+    command: -c 'touch httpd.conf; goscrape "$$GOSCRAPE_HOST" $$GOSCRAPE_ARGS; sleep infinity'
     volumes:
       - ./cloner/sites/${GOSCRAPE_HOST:-"nic.eu.org"}:/sites/${GOSCRAPE_HOST:-"nic.eu.org"}
     networks:

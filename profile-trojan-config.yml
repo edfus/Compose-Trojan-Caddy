@@ -17,7 +17,7 @@ services:
       - caddy.1_route.1_header.Content-Type=application/x-yaml
       - caddy.1_route.1_header.Profile-Update-Interval=12
       - caddy.1_route.1_header.Subscription-Userinfo="expire=${CONFIG_DUE_TIMESTAMP:-2274253409}"
-      - caddy.1_route.2_reverse_proxy="* http://trojan-config-server:3000"
+      - caddy.1_route.2_reverse_proxy=* http://trojan-config-server:3000
     logging:
       options:
         max-size: "10m"
