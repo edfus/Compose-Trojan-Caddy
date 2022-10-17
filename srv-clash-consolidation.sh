@@ -204,8 +204,8 @@ EOF
   blue "Config files are available at https://$CONSOLIDATION_ACCESS_USERNAME:${CONSOLIDATION_ACCESS_PASSWORD}@${DOMAIN_NAME}/.profiles?code=$(echo "TWFpbmxhbmQlMjBDaGluYQo=" | base64 -d)"
   green "======================="
 
-  compose_cmd "profile-clash-consolidation" "exec -it clash-profiles" "wrangler config"
-  compose_cmd "profile-clash-consolidation" "exec -it clash-profiles" "wrangler publish"
+  compose_cmd "profile-clash-consolidation" "exec clash-profiles" "wrangler config"
+  compose_cmd "profile-clash-consolidation" "exec clash-profiles" "wrangler publish"
 
   compose_cmd "profile-clash-consolidation" "logs --follow clash-profiles"
 }
