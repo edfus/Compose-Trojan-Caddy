@@ -104,17 +104,17 @@ function consolidate () {
     $PKGMANAGER -y install git
   fi
   set -e
-  REPOSITORY=consolidate-clash-profiles
-  if [ -d "$REPOSITORY" ]; then
+  CONSOLIDATION_REPOSITORY_NAME=${CONSOLIDATION_REPOSITORY_NAME:-consolidate-clash-profiles}
+  if [ -d "$CONSOLIDATION_REPOSITORY_NAME" ]; then
     CWD=$PWD
-    cd "$REPOSITORY"
+    cd "$CONSOLIDATION_REPOSITORY_NAME"
     set +e
     git fetch --all
     git reset --hard origin/master
     set -e
     cd "$CWD"
   else
-    git clone --depth 1 https://github.com/edfus/"$REPOSITORY"
+    git clone --depth 1 https://github.com/edfus/"$CONSOLIDATION_REPOSITORY_NAME"
   fi
 
   if [ "`docker network inspect caddy >/dev/null 2>&1; echo $?`" != 0 ]; then
@@ -163,28 +163,29 @@ EOF
   if [ "$CONSOLIDATION_WRANGLER_CONFIG" == "" ] || ! [ -f  "$CONSOLIDATION_WRANGLER_CONFIG" ]; then
     if [ -f wrangler.toml ]; then
       CONSOLIDATION_WRANGLER_CONFIG=wrangler.toml
-    elif [ -f "$REPOSITORY/wrangler.toml" ]; then
-      CONSOLIDATION_WRANGLER_CONFIG="$REPOSITORY/wrangler.toml"
+    elif [ -f "$CONSOLIDATION_REPOSITORY_NAME/wrangler.toml" ]; then
+      CONSOLIDATION_WRANGLER_CONFIG="$CONSOLIDATION_REPOSITORY_NAME/wrangler.toml"
     else
       # docker-compose -f "$COMPOSE_FILE" --env-file /dev/null run clash-profiles ./init-wrangler.sh
-      chmod +x "./$REPOSITORY/init-wrangler.sh"
-      "./$REPOSITORY/init-wrangler.sh"
-      CONSOLIDATION_WRANGLER_CONFIG="./$REPOSITORY/wrangler.toml"
+      chmod +x "./$CONSOLIDATION_REPOSITORY_NAME/init-wrangler.sh"
+      "./$CONSOLIDATION_REPOSITORY_NAME/init-wrangler.sh"
+      CONSOLIDATION_WRANGLER_CONFIG="./$CONSOLIDATION_REPOSITORY_NAME/wrangler.toml"
     fi
   fi
 
   CONSOLIDATION_ACCESS_USERNAME=${CONSOLIDATION_ACCESS_USERNAME:-$(urandom_lc 2)}
   CONSOLIDATION_ACCESS_PASSWORD=${CONSOLIDATION_ACCESS_PASSWORD:-$(urandom 6)}
-  CONSOLIDATION_PASSWORD_BCRYPTED=$(docker run --rm caddy/caddy:2.4.0-alpine caddy hash-password -algorithm "bcrypt" -plaintext "$CONFIG_PASSWORD")
+  CONSOLIDATION_ACCESS_PASSWORD_BCRYPTED=$(docker run --rm caddy/caddy:2.4.0-alpine caddy hash-password -algorithm "bcrypt" -plaintext "$CONFIG_PASSWORD")
 
   cat > ".profile-clash-consolidation.env" <<EOF
-CONSOLIDATION_PROFILES_OUTPUT=${CONSOLIDATION_PROFILES_OUTPUT:+$(readlink -f "$CONSOLIDATION_PROFILES_OUTPUT")}
-CONSOLIDATION_PROFILES_SRC=$(readlink -f "$CONSOLIDATION_PROFILES_SRC")
-CONSOLIDATION_INJECTIONS_SRC=$(readlink -f "$CONSOLIDATION_INJECTIONS_SRC")
-CONSOLIDATION_WRANGLER_CONFIG=${CONSOLIDATION_WRANGLER_CONFIG:+$(readlink -f "$CONSOLIDATION_WRANGLER_CONFIG")}
+CONSOLIDATION_REPOSITORY_NAME="${CONSOLIDATION_REPOSITORY_NAME}"
+CONSOLIDATION_PROFILES_OUTPUT="${CONSOLIDATION_PROFILES_OUTPUT:+$(readlink -f "$CONSOLIDATION_PROFILES_OUTPUT")}"
+CONSOLIDATION_PROFILES_SRC="$(readlink -f "$CONSOLIDATION_PROFILES_SRC")"
+CONSOLIDATION_INJECTIONS_SRC="$(readlink -f "$CONSOLIDATION_INJECTIONS_SRC")"
+CONSOLIDATION_WRANGLER_CONFIG="${CONSOLIDATION_WRANGLER_CONFIG:+$(readlink -f "$CONSOLIDATION_WRANGLER_CONFIG")}"
 CONSOLIDATION_ACCESS_USERNAME="$CONSOLIDATION_ACCESS_USERNAME"
 CONSOLIDATION_ACCESS_PASSWORD="$CONSOLIDATION_ACCESS_PASSWORD"
-CONSOLIDATION_PASSWORD_BCRYPTED=$CONSOLIDATION_PASSWORD_BCRYPTED
+CONSOLIDATION_ACCESS_PASSWORD_BCRYPTED="$CONSOLIDATION_ACCESS_PASSWORD_BCRYPTED"
 EOF
 
   cat >> ".profile-clash-consolidation.env" <<EOF

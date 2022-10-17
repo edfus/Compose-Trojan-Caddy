@@ -4,7 +4,7 @@ services:
     expose:
       - "80"
     restart: unless-stopped
-    build: .
+    build: ./$CONSOLIDATION_REPOSITORY_NAME/
     environment:
       NODE_ENV: production
       EXPIRE: ${CONSOLIDATION_CUTOFF_TIMESTAMP}
