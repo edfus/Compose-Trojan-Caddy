@@ -8,6 +8,8 @@ services:
       goscrape "$$GOSCRAPE_HOST" $$GOSCRAPE_ARGS
     volumes:
       - ./cloner/sites/${GOSCRAPE_HOST:-"nic.eu.org"}:/sites/${GOSCRAPE_HOST:-"nic.eu.org"}
+    networks:
+      - caddy
     environment:
       GOSCRAPE_ARGS: ${GOSCRAPE_ARGS:-"--depth 3 --imagequality 4"}
       GOSCRAPE_HOST: ${GOSCRAPE_HOST:-"nic.eu.org"}
