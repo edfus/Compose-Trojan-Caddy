@@ -664,6 +664,9 @@ while [[ $# -gt 0 ]]; do
       shift # past argument
       shift # past value
       ;;
+    update)
+      UPDATE=YES
+      ;;
     -h|--help)
       sed -n '/POSITIONAL_ARGS=\(\)/,$p' "$0"
       exit 0
@@ -685,9 +688,16 @@ if [ "$DOWN" == YES ]; then
   down
 fi
 
+if [ "$UPDATE" == YES ]; then
+  git reset --hard HEAD
+  git pull origin master
+  chmod +x *.sh
+fi
+
 if [ "$UP" == YES ]; then
   up
 fi
+
 
 if [ "$CONSOLIDATE" == YES ]; then
   consolidate
