@@ -5,9 +5,10 @@ services:
     build: ./cloner
     profiles: [ "decoy-goscrape" ]
     entrypoint: sh
-    command: -c 'goscrape "https://$$GOSCRAPE_HOST" $$GOSCRAPE_ARGS; sleep infinity'
+    command: -c 'goscrape "https://$$GOSCRAPE_HOST" $$GOSCRAPE_ARGS && sleep infinity'
     volumes:
       - ./cloner/sites/${GOSCRAPE_HOST:-"nic.eu.org"}:/sites/${GOSCRAPE_HOST:-"nic.eu.org"}
+    restart: unless-stopped
     networks:
       - caddy
     environment:

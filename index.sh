@@ -554,6 +554,9 @@ EOF
     case $choice in
       1) # Goscrape
         compose_up "profile-decoys" "--profile decoy-goscrape"
+        COMMANDS_ON_EXIT+=(
+          'compose_cmd "profile-decoys" "logs --follow"'
+        )
        ;;
       2) # Archivebox
         compose_cmd "profile-decoys" "--profile decoy-archivebox run" "archivebox init --setup"
@@ -563,12 +566,20 @@ EOF
     esac
   fi
 
+  read -r -d '' PROMPT << EOM
   green "======================="
   blue "USER: $CONFIG_USERNAME"
   blue "PASSWORD: ${CONFIG_PASSWORD}"
   blue "TROJAN PASSWORD: ${TROJAN_PASSWORD}"
   blue "Config files are available at https://$CONFIG_USERNAME:${CONFIG_PASSWORD}@${DOMAIN_NAME}/.config/clash.yml"
   green "======================="
+EOM
+
+  COMMANDS_ON_EXIT+=(
+    "$PROMPT"
+  )
+
+  eval "$PROMPT"
 
   check_env
   all_envfiles="`ls_all_envfiles`"
@@ -603,6 +614,8 @@ if [[ $# -eq 0 ]]; then
   up
   exit
 fi
+
+COMMANDS_ON_EXIT=()
 
 # https://stackoverflow.com/a/14203146/13910382
 POSITIONAL_ARGS=()
@@ -700,7 +713,12 @@ if [ "$UP" == YES ]; then
   up
 fi
 
-
 if [ "$CONSOLIDATE" == YES ]; then
   consolidate
 fi
+
+
+for command in "${COMMANDS_ON_EXIT[@]}"
+do
+  eval "$command"
+done
