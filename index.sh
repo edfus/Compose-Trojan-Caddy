@@ -644,6 +644,10 @@ while [[ $# -gt 0 ]]; do
       DOWN=YES
       shift # past argument
       ;;
+    update)
+      UPDATE=YES
+      shift # past argument
+      ;;
     -I|--injections)
       CONSOLIDATION_INJECTIONS_SRC="$2"
       shift # past argument
@@ -663,9 +667,6 @@ while [[ $# -gt 0 ]]; do
       CONSOLIDATION_PROFILES_OUTPUT="$2"
       shift # past argument
       shift # past value
-      ;;
-    update)
-      UPDATE=YES
       ;;
     -h|--help)
       sed -n '/POSITIONAL_ARGS=\(\)/,$p' "$0"
