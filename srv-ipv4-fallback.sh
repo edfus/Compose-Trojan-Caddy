@@ -140,7 +140,7 @@ services:
       - ./ssl:/ssl
     working_dir: /config
     labels:
-      - caddy=http://:56790
+      - caddy=http://:8080
       - caddy.@intruders.expression={http.request.port} == 56790
       - caddy.redir=@intruders https://{http.request.host} permanent
     networks:

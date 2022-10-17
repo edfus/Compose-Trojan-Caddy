@@ -95,8 +95,9 @@ compose_up () {
   fi
 }
 
+# https://stackoverflow.com/a/18451819/13910382
 ls_all_envfiles () {
-  ls .env .*.env
+  LC_ALL=C ls .env .*.env
 }
 
 stat_files () {
@@ -127,8 +128,15 @@ check_env () {
   fi
 }
 
+function initialize () {
+  install_docker
+  install_docker_compose
+}
+
 function up () {
   set +e
+
+  initialize
 
   check_env
 
@@ -159,24 +167,6 @@ function up () {
       red "============================================================="
   fi
 
-  # # https://github.com/FaithPatrick/trojan-caddy-docker-compose/blob/master/install_beta.sh
-  # CHECK=$(grep SELINUX= /etc/selinux/config | grep -v "#")
-  # if [ "$CHECK" == "SELINUX=enforcing" ] || [ "$CHECK" == "SELINUX=permissive" ]; then
-  #     red "======================================================================="
-  #     red "SELinux is enabled and may hamper the process of requesting site certificates"
-  #     red "======================================================================="
-  #     read -p "Disable SELinux and reboot the machine? [Y/n]:" yn
-  #   [ -z "${yn}" ] && yn="y"
-  #   if [[ $yn == [Yy] ]]; then
-  #       sed -i 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/selinux/config
-  #       sed -i 's/SELINUX=permissive/SELINUX=disabled/g' /etc/selinux/config
-  #             setenforce 0
-  #       echo -e "Rebooting..."
-  #       reboot
-  #   fi
-  #     exit
-  # fi
-
   read -e -i "$DOMAIN_NAME" -p "$(blue 'Enter the domain name: ')" DOMAIN_NAME
 
   green "Checking for possible DNS resolution failures..."
@@ -206,9 +196,6 @@ function up () {
     red "================================"
     return 1
   fi
-
-  install_docker
-  install_docker_compose
 
   green "Checking if IPv6 is supported..."
 
@@ -589,117 +576,16 @@ EOF
   chmod 0744 .profiles.env.stat
 }
 
-
 function consolidate () {
-  git --version > /dev/null 2>&1
-  if [ $? != 0 ]; then
-    set -e
-    $PKGMANAGER -y install git
-  fi
-  set -e
-  REPOSITORY=consolidate-clash-profiles
-  if [ -d "$REPOSITORY" ]; then
-    CWD=$PWD
-    cd "$REPOSITORY"
-    set +e
-    git fetch --all
-    git reset --hard origin/master
-    set -e
-    cd "$CWD"
-  else
-    git clone --depth 1 https://github.com/edfus/"$REPOSITORY"
-  fi
+  ./srv-clash-consolidation.sh "$@"
+}
 
-  if [ "`docker network inspect caddy >/dev/null 2>&1; echo $?`" != 0 ]; then
-    red "Unrecoverable error: can't find a pre-existing network named 'caddy'"
-    red "If you are settng up a server dedicated to Trojan services,"
-    red "run this script again with switch --up"
-    red "Or create a lucaslorentz/caddy-docker-proxy network manually."
-    return 1
-  fi
+function add-ipv4-preferred () {
+  ./srv-ipv4-fallback.sh "$@"
+}
 
-  check_env
-
-  all_envfiles="`ls_all_envfiles`"
-  # https://stackoverflow.com/a/30969768
-  set -o allexport
-  for envfile in $all_envfiles; do source "$envfile"; done
-  set +o allexport
-
-  if [ "$CONSOLIDATION_PROFILES_SRC" == "" ] || ! [ -f  "$CONSOLIDATION_PROFILES_SRC" ]; then
-    if ! [ -f profiles.js ]; then
-      cat>profiles.js<<EOF
-export default [
-
-]
-EOF
-    fi
-    nano profiles.js
-    CONSOLIDATION_PROFILES_SRC=profiles.js
-  fi
-
-  if [ "$CONSOLIDATION_INJECTIONS_SRC" == "" ] || ! [ -f  "$CONSOLIDATION_INJECTIONS_SRC" ]; then
-    if ! [ -f injections.yml ]; then
-      cat>injections.yml<<EOF
-Microsoft Network Connectivity Status Indicator:
-  payload:
-    - DOMAIN,dns.msftncsi.com,Microsoft Network Connectivity Status Indicator
-    - DOMAIN,www.msftncsi.com,Microsoft Network Connectivity Status Indicator
-    - DOMAIN,www.msftconnecttest.com,Microsoft Network Connectivity Status Indicator
-
-EOF
-    fi
-    nano injections.yml
-    CONSOLIDATION_INJECTIONS_SRC=injections.yml
-  fi
-
-  if [ "$CONSOLIDATION_WRANGLER_CONFIG" == "" ] || ! [ -f  "$CONSOLIDATION_WRANGLER_CONFIG" ]; then
-    if [ -f wrangler.toml ]; then
-      CONSOLIDATION_WRANGLER_CONFIG=wrangler.toml
-    elif [ -f "$REPOSITORY/wrangler.toml" ]; then
-      CONSOLIDATION_WRANGLER_CONFIG="$REPOSITORY/wrangler.toml"
-    else
-      # docker-compose -f "$COMPOSE_FILE" --env-file /dev/null run clash-profiles ./init-wrangler.sh
-      chmod +x "./$REPOSITORY/init-wrangler.sh"
-      "./$REPOSITORY/init-wrangler.sh"
-      CONSOLIDATION_WRANGLER_CONFIG="./$REPOSITORY/wrangler.toml"
-    fi
-  fi
-
-  CONSOLIDATION_ACCESS_USERNAME=${CONSOLIDATION_ACCESS_USERNAME:-$(urandom_lc 2)}
-  CONSOLIDATION_ACCESS_PASSWORD=${CONSOLIDATION_ACCESS_PASSWORD:-$(urandom 6)}
-  CONSOLIDATION_PASSWORD_BCRYPTED=$(docker run --rm caddy/caddy:2.4.0-alpine caddy hash-password -algorithm "bcrypt" -plaintext "$CONFIG_PASSWORD")
-
-  cat > ".profile-clash-consolidation.env" <<EOF
-CONSOLIDATION_PROFILES_OUTPUT=${CONSOLIDATION_PROFILES_OUTPUT:+$(readlink -f "$CONSOLIDATION_PROFILES_OUTPUT")}
-CONSOLIDATION_PROFILES_SRC=$(readlink -f "$CONSOLIDATION_PROFILES_SRC")
-CONSOLIDATION_INJECTIONS_SRC=$(readlink -f "$CONSOLIDATION_INJECTIONS_SRC")
-CONSOLIDATION_WRANGLER_CONFIG=${CONSOLIDATION_WRANGLER_CONFIG:+$(readlink -f "$CONSOLIDATION_WRANGLER_CONFIG")}
-CONSOLIDATION_ACCESS_USERNAME="$CONSOLIDATION_ACCESS_USERNAME"
-CONSOLIDATION_ACCESS_PASSWORD="$CONSOLIDATION_ACCESS_PASSWORD"
-CONSOLIDATION_PASSWORD_BCRYPTED=$CONSOLIDATION_PASSWORD_BCRYPTED
-EOF
-
-  cat >> ".profile-clash-consolidation.env" <<EOF
-CONSOLIDATION_CUTOFF_TIMESTAMP=${CONFIG_DUE_TIMESTAMP:-$CONSOLIDATION_CUTOFF_TIMESTAMP}
-EOF
-
-  compose_up "profile-clash-consolidation" "" "--build"
-
-  if [ "$DOMAIN_NAME" == "" ]; then
-    read -e -p "$(blue 'Enter the domain name: ')" DOMAIN_NAME
-  fi
-
-  green "======================="
-  blue "USERNAME: $CONSOLIDATION_ACCESS_USERNAME"
-  blue "PASSWORD: ${CONSOLIDATION_ACCESS_PASSWORD}"
-  blue "Config files are available at https://$CONSOLIDATION_ACCESS_USERNAME:${CONSOLIDATION_ACCESS_PASSWORD}@${DOMAIN_NAME}/.profiles?code=$(echo "TWFpbmxhbmQlMjBDaGluYQo=" | base64 -d)"
-  green "======================="
-
-  compose_cmd "profile-clash-consolidation" "exec -it clash-profiles" "wrangler config"
-  compose_cmd "profile-clash-consolidation" "exec -it clash-profiles" "wrangler publish"
-
-  compose_cmd "profile-clash-consolidation" "logs --follow clash-profiles"
+function schedule-ipv6-rotation () {
+  ./srv-ipv6-rotation.sh "$@"
 }
 
 function down () {
@@ -723,11 +609,31 @@ POSITIONAL_ARGS=()
 UP=
 DOWN=
 CONSOLIDATE=
+INITIALIZE=YES
 
 while [[ $# -gt 0 ]]; do
   case $1 in
     -c|--consolidate|consolidate)
       CONSOLIDATE=YES
+      shift # past argument
+      ;;
+    -i|--initialize|--install|initialize|install)
+      INITIALIZE=YES # By default YES
+      shift # past argument
+      ;;
+    -p|--port|--add-port|--fallback-port|--alternate-port)
+      ALTERNATE_PORT="$2"
+      shift # past argument
+      shift # past value
+#NOTE
+#       http://localhost:3010 {
+# 	reverse_proxy /graphql https://prom.ua {
+# 		header_up Host {http.reverse_proxy.upstream.hostport}
+# 	}
+# }
+      ;;
+    --prefer-ipv4)
+      PREFER_IPV4=YES
       shift # past argument
       ;;
     -u|--up|up)
@@ -738,22 +644,22 @@ while [[ $# -gt 0 ]]; do
       DOWN=YES
       shift # past argument
       ;;
-    -i|--injections)
+    -I|--injections)
       CONSOLIDATION_INJECTIONS_SRC="$2"
       shift # past argument
       shift # past value
       ;;
-    -p|--profiles|--config)
+    -P|--profiles|--config)
       CONSOLIDATION_PROFILES_SRC="$2"
       shift # past argument
       shift # past value
       ;;
-    -w|--wranger|--wranger-config)
+    -W|--wranger|--wranger-config)
       CONSOLIDATION_WRANGLER_CONFIG="$2"
       shift # past argument
       shift # past value
       ;;
-    -o|--output)
+    -O|--output)
       CONSOLIDATION_PROFILES_OUTPUT="$2"
       shift # past argument
       shift # past value
