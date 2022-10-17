@@ -397,7 +397,7 @@ EOF
 
   CONFIG_DUE_TIMESTAMP=$(date "+%s" -d "${DUE_DATE}")
   
-  read -e -i "${DOH_PATH:-/$(urandom_lc 4)}" -p "$(blue 'Enter the DoH URI path (Leave empty to disable): ')" DOH_PATH 
+  read -e -i "${DOH_PATH-/$(urandom_lc 4)}" -p "$(blue 'Enter the DoH URI path (Leave empty to disable): ')" DOH_PATH 
   DOH_PATH="$(echo "$DOH_PATH" | sed -r 's/^\/*([^\/])/\/\1/')"
 
   mkdir -p ./caddy/config
