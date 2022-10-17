@@ -15,21 +15,23 @@ services:
       GOSCRAPE_HOST: ${GOSCRAPE_HOST:-"nic.eu.org"}
 
   goscrape-server:
-    image: lipanski/docker-static-website:2.1.0
+    image: caddy/caddy:2.4.0-alpine
+    entrypoint: sh
+    command: -c 'caddy file-server --root "/sites/" --listen 0.0.0.0:80 --access-log'
     expose:
-      - 3000
+      - 80
     networks:
       - caddy
     profiles: [ "decoy-goscrape" ]
     labels:
       caddy: "http://:8080"
-      caddy.reverse_proxy: "/* http://goscrape-server:3000"
+      caddy.reverse_proxy: "/* http://goscrape-server:80"
     logging:
       options:
         max-size: "10m"
         max-file: "3"
     volumes:
-      - ./cloner/sites/${GOSCRAPE_HOST:-"nic.eu.org"}:/home/static/:ro
+      - ./cloner/sites/${GOSCRAPE_HOST:-"nic.eu.org"}:/sites
     restart: unless-stopped
 
   archivebox:
