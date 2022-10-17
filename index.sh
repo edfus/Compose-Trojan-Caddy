@@ -518,7 +518,7 @@ EOF
   [ -z "${decoy}" ] && decoy="y"
 
   if [[ $decoy == [Yy] ]]; then
-    read -e -i "1" -p "$(blue '1) Goscrape website copier 2) Archivebox')" choice
+    read -e -i "1" -p "$(blue '1) Goscrape website copier 2) Archivebox') " choice
 
     case $choice in
       1) # Goscrape

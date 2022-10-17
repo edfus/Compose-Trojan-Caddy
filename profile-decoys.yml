@@ -4,7 +4,6 @@ services:
   goscrape:
     build: ./cloner
     profiles: [ "decoy-goscrape" ]
-    labels:
     command: >
       goscrape "$$GOSCRAPE_HOST" $$GOSCRAPE_ARGS
     volumes:
