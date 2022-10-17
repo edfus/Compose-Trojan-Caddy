@@ -175,7 +175,7 @@ EOF
 
   CONSOLIDATION_ACCESS_USERNAME=${CONSOLIDATION_ACCESS_USERNAME:-$(urandom_lc 2)}
   CONSOLIDATION_ACCESS_PASSWORD=${CONSOLIDATION_ACCESS_PASSWORD:-$(urandom 6)}
-  CONSOLIDATION_ACCESS_PASSWORD_BCRYPTED=$(docker run --rm caddy/caddy:2.4.0-alpine caddy hash-password -algorithm "bcrypt" -plaintext "$CONFIG_PASSWORD")
+  CONSOLIDATION_ACCESS_PASSWORD_BCRYPTED=$(docker run --rm caddy/caddy:2.4.0-alpine caddy hash-password -algorithm "bcrypt" -plaintext "$CONSOLIDATION_ACCESS_PASSWORD")
 
   cat > ".profile-clash-consolidation.env" <<EOF
 CONSOLIDATION_REPOSITORY_NAME="${CONSOLIDATION_REPOSITORY_NAME}"
