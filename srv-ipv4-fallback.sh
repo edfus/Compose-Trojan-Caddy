@@ -64,7 +64,7 @@ POSITIONAL_ARGS=()
 
 BUILD=
 PORT=6443
-URL=https://prom.ua
+ORIGINS=https://prom.ua
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -77,8 +77,8 @@ while [[ $# -gt 0 ]]; do
       shift # past argument
       shift # past argument
       ;;
-    -url|--url)
-      URL="$2"
+    -o|--origins|--origin)
+      ORIGINS="$2"
       shift # past argument
       shift # past argument
       ;;
@@ -184,8 +184,8 @@ services:
     labels:
       - caddy=http://:8080
       - caddy.@intruders.expression={http.request.port} == $PORT
-      - caddy.reverse_proxy=@intruders $URL
-      - caddy.reverse_proxy.header_up.Host={http.reverse_proxy.upstream.hostport}
+      - caddy.reverse_proxy=@intruders $ORIGINS
+      - caddy.reverse_proxy.header_up=Host {http.reverse_proxy.upstream.hostport}
       - caddy.reverse_proxy.method=GET
       - caddy.reverse_proxy.transport=http
       - caddy.reverse_proxy.transport.dial_timeout=3s

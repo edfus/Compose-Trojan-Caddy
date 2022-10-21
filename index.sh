@@ -704,7 +704,8 @@ if [ "$DOWN" == YES ]; then
 fi
 
 if [ "$UPDATE" == YES ]; then
-  git reset --hard HEAD
+  git reset --hard @{u}
+  # git reset --hard HEAD
   git pull origin master
   chmod +x *.sh
 fi
