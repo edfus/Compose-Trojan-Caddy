@@ -26,7 +26,7 @@ services:
     restart: unless-stopped
 
   caddy:
-    image: lucaslorentz/caddy-docker-proxy:2.4.0-alpine
+    image: lucaslorentz/caddy-docker-proxy:2.8-alpine
     container_name: caddy
     ports:
       - "80:80"
@@ -37,7 +37,7 @@ services:
     networks:
       - caddy
     labels:
-      caddy_0.servers.protocol.allow_h2c: 
+      caddy_0.servers.protocols: h1 h2 h2c
       caddy_0.log.output: stdout
       caddy_0.log.format: filter
       caddy_0.log.format.wrap: json
