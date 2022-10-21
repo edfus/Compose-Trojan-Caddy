@@ -28,14 +28,58 @@ warn () {
   return 1
 }
 
+ls_all_envfiles () {
+  LC_ALL=C ls .env .*.env
+}
+
+stat_files () {
+  stat -c "%U:%G %a %n" $1
+}
+
+check_env () {
+  if [ -f .profiles.env.stat ]; then
+    echo "$(stat_files `ls_all_envfiles`)" > ".tmp.profiles.env.stat"
+    green "Comparing status of all environment files..."
+    cmp .profiles.env.stat ".tmp.profiles.env.stat"
+    if [ $? != "0" ]; then
+      green "====================="
+      green "before: (.profiles.env.stat)"
+      green "$(cat .profiles.env.stat)"
+      green
+      blue  "========V.S.=========="
+      red "after: (.tmp.profiles.env.stat)"
+      red "$(cat .tmp.profiles.env.stat)"
+      red
+      read -e -p "$(blue 'Press Enter to continue at your own risk.')" 
+      mv .profiles.env.stat .profiles.env.stat.bak
+      mv .tmp.profiles.env.stat .profiles.env.stat
+      chmod 0744 .profiles.env.stat
+    else 
+      rm .tmp.profiles.env.stat
+    fi
+  fi
+}
+
 POSITIONAL_ARGS=()
 
 BUILD=
+PORT=6443
+URL=https://prom.ua
 
 while [[ $# -gt 0 ]]; do
   case $1 in
     -b|--build|--rebuild|--force-rebuild)
       BUILD=YES
+      shift # past argument
+      ;;
+    -p|--port)
+      PORT="$2"
+      shift # past argument
+      shift # past argument
+      ;;
+    -url|--url)
+      URL="$2"
+      shift # past argument
       shift # past argument
       ;;
     -h|--help)
@@ -61,14 +105,12 @@ caddy_network_exists=`[ $? == 0 ] && echo "true" || echo "false"`
 
 set -e
 if [ "$caddy_network_exists" == "true" ]; then
-  caddy_ipv6_enabled=`docker network inspect caddy | jq '.[0].EnableIPv6'`
-  if [ "$caddy_ipv6_enabled" != "true" ]; then
-    warn
-    exit $?
-  fi
+  check_env
 
+  all_envfiles="`ls_all_envfiles`"
+  # https://stackoverflow.com/a/30969768
   set -o allexport
-  source .env
+  for envfile in $all_envfiles; do source "$envfile"; done
   set +o allexport
 
   green "Creating Trojan config..."
@@ -83,17 +125,17 @@ if [ "$caddy_network_exists" == "true" ]; then
   }
 }
 EOF
-)  > ./trojan/config/config-v4.json
+)  > "./trojan/config/config-v4-$PORT.json"
 
   green "Checking the validity of Clash config..."
   proxy_exists=$(docker run --rm -v "${PWD}":/workdir mikefarah/yq \
-  'contains({"proxies": [{"name": "'"$PROFILE_NAME"'"}]})' ./caddy/config/clash.yml)
+  'contains({"proxies": [{"name": "'"$CONFIG_PROFILE_NAME"'"}]})' ./caddy/config/clash.yml)
   if [ "$proxy_exists" != "true" ]; then
-    red "\$PROFILE_NAME '$PROFILE_NAME' does not exist"
+    red "\$PROFILE_NAME '$CONFIG_PROFILE_NAME' does not exist"
     red "Trying the first item in the proxies array instead"
-    PROFILE_NAME=$(docker run --rm -v "${PWD}":/workdir mikefarah/yq \
+    CONFIG_PROFILE_NAME=$(docker run --rm -v "${PWD}":/workdir mikefarah/yq \
   '.proxies[0].name' ./caddy/config/clash.yml)
-    if [ "$PROFILE_NAME" == "" ]; then
+    if [ "$CONFIG_PROFILE_NAME" == "" ]; then
       red "./caddy/config/clash.yml is malformed"
       cat ./caddy/config/clash.yml
       exit 1
@@ -105,15 +147,15 @@ EOF
   docker run -i --rm -v "${PWD}":/workdir mikefarah/yq \
   'del(
       .proxy-groups[] | select(.name == "Proxy") | 
-      .proxies[] | select(.name == "'"$PROFILE_NAME"' IPv4")
+      .proxies[] | select(.name == "'"$CONFIG_PROFILE_NAME"' IPv4 '"$PORT"'")
       ) |
-    del(.proxies[] | select(.name == "'"$PROFILE_NAME"' IPv4")) |
+    del(.proxies[] | select(.name == "'"$CONFIG_PROFILE_NAME"' IPv4 '"$PORT"'")) |
     .proxies = .proxies + ( 
-      .proxies[] | select(.name == "'"$PROFILE_NAME"'") | {
-        "name": .name + " IPv4",
+      .proxies[] | select(.name == "'"$CONFIG_PROFILE_NAME"'") | {
+        "name": .name + " IPv4 '"$PORT"'",
         "type": .type,
         "server": .server,
-        "port": 56790,
+        "port": '"$PORT"',
         "password": .password,
         "udp": .udp,
         "alpn": .alpn
@@ -121,31 +163,39 @@ EOF
     ) |
     (
       (.proxy-groups[] | select(.name == "Proxy"))
-      .proxies += "'"$PROFILE_NAME"' IPv4" 
+      .proxies += "'"$CONFIG_PROFILE_NAME"' IPv4 '"$PORT"'" 
     )
-  ' ./caddy/config/clash.yml > ./caddy/config/clash-v4.yml
+  ' ./caddy/config/clash.yml > "./caddy/config/clash-v4-$PORT.yml"
   
-  mv ./caddy/config/clash.yml ./caddy/config/clash-v6.yml
-  mv ./caddy/config/clash-v4.yml ./caddy/config/clash.yml
+  mv ./caddy/config/clash.yml ./caddy/config/clash-v6-before-"$PORT".yml
+  mv "./caddy/config/clash-v4-$PORT.yml" ./caddy/config/clash.yml
 
-  cat>./profile-trojan-ipv4.yml<<EOF
+  cat>"./profile-trojan-ipv4-$PORT.yml"<<EOF
 version: '3.9'
 services:
   trojan:
     image: trojangfw/trojan:latest
     ports:
-      - "56790:443"
+      - "$PORT:443"
     volumes:
       - ./trojan/config:/config
       - ./ssl:/ssl
     working_dir: /config
     labels:
       - caddy=http://:8080
-      - caddy.@intruders.expression={http.request.port} == 56790
-      - caddy.redir=@intruders https://{http.request.host} permanent
+      - caddy.@intruders.expression={http.request.port} == $PORT
+      - caddy.reverse_proxy=@intruders $URL
+      - caddy.reverse_proxy.header_up.Host={http.reverse_proxy.upstream.hostport}
+      - caddy.reverse_proxy.method=GET
+      - caddy.reverse_proxy.transport=http
+      - caddy.reverse_proxy.transport.dial_timeout=3s
+      - caddy.reverse_proxy.transport.response_header_timeout=1s
+      - caddy.reverse_proxy.transport.keepalive_idle_conns=10
+      - caddy.reverse_proxy.transport.max_conns_per_host=20
+      - caddy.reverse_proxy.transport.write_timeout=5s
     networks:
       - caddy
-    command: [ "trojan", "config-v4.json" ]
+    command: [ "trojan", "config-v4-$PORT.json" ]
     logging:
       options:
         max-size: "10m"
@@ -157,23 +207,13 @@ networks:
 EOF
   # additional_options="$( [ "$BUILD" == "YES" ] && echo "--build" || /bin/true )"
   if [ "$BUILD" == "YES" ]; then
-    docker-compose -p "trojan-caddy-ipv4" -f ./profile-trojan-ipv4.yml --env-file /dev/null down
+    docker-compose -p "trojan-caddy-ipv4-$PORT" -f "./profile-trojan-ipv4-$PORT.yml" --env-file /dev/null down
   fi
-  docker-compose -p "trojan-caddy-ipv4" -f ./profile-trojan-ipv4.yml --env-file /dev/null up -d
+  docker-compose -p "trojan-caddy-ipv4-$PORT" -f "./profile-trojan-ipv4-$PORT.yml" --env-file /dev/null up -d
   if [ $? != 0 ]; then
-    docker-compose -p "trojan-caddy-ipv4" -f ./profile-trojan-ipv4.yml --env-file /dev/null down
-    docker-compose -p "trojan-caddy-ipv4" -f ./profile-trojan-ipv4.yml --env-file /dev/null up -d
+    docker-compose -p "trojan-caddy-ipv4-$PORT" -f "./profile-trojan-ipv4-$PORT.yml" --env-file /dev/null down
+    docker-compose -p "trojan-caddy-ipv4-$PORT" -f "./profile-trojan-ipv4-$PORT.yml" --env-file /dev/null up -d
   fi
-
-  green "======================="
-  blue "USER: $USERNAME"
-  blue "PASSWORD: ${PASSWORD}"
-  blue "Config files are available at https://$USERNAME:${PASSWORD}@${DOMAIN_NAME}/.config/clash.yml"
-  green "======================="
-
-  # reload
-  docker exec $(docker ps | grep trojan[-_]caddy[-_]ipv4[-_]trojan | awk '{ print $1 }' | head -n 1) \
-    kill -s SIGHUP 1
 else
   warn
   exit $?
