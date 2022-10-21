@@ -183,8 +183,9 @@ services:
     working_dir: /config
     labels:
       - caddy=http://:8080
-      - caddy.@intruders.expression={http.request.port} == $PORT
-      - caddy.reverse_proxy=@intruders $ORIGINS
+      - caddy.@port-$PORT.expression={http.request.port} == $PORT
+      - caddy.@port-$PORT.path=/*
+      - caddy.reverse_proxy=@port-$PORT $ORIGINS
       - caddy.reverse_proxy.header_up=Host {http.reverse_proxy.upstream.hostport}
       - caddy.reverse_proxy.method=GET
       - caddy.reverse_proxy.transport=http
