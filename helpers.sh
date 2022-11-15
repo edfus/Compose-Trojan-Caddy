@@ -31,3 +31,8 @@ reset_consolidate () {
   compose_exec "profile-clash-consolidation" "clash-profiles" \
    "sed -i 's/debug/info/' logger.conf.js && kill -s SIGHUP 1"
 }
+
+doh_domains () {
+  ID="$(compose_cmd "profile-doh" "ps -q doh")"
+  docker logs "${ID}" -f --tail 300 | grep -v "HTTP/" --color=never | sed 's/[^"]*"\(.*\)\.[^."]*".*/\1/'
+}
