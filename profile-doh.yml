@@ -14,10 +14,14 @@ services:
       DOH_SERVER_LISTEN: ":8053"
       DOH_SERVER_TIMEOUT: "10"
       DOH_SERVER_TRIES: "3"
-      DOH_SERVER_VERBOSE: "false"
+      DOH_SERVER_VERBOSE: "true"
     networks:
       - caddy
     restart: unless-stopped
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 networks:
   caddy:

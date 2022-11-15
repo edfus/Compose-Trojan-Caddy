@@ -64,7 +64,7 @@ POSITIONAL_ARGS=()
 
 BUILD=
 PORT=6443
-ORIGINS=https://prom.ua
+ORIGINS="https://prom.ua https://evo.company https://batcaddy.com" 
 
 while [[ $# -gt 0 ]]; do
   case $1 in
