@@ -20,11 +20,15 @@ pino_pretty () {
   docker run -i --rm gildas/pino
 }
 
+log_consolidate () {
+  ID="$(compose_cmd "profile-clash-consolidation" "ps -q clash-profiles")"
+  docker logs "$ID" -f --tail 100 | pino_pretty
+}
+
 debug_consolidate () {
   compose_exec "profile-clash-consolidation" "clash-profiles" \
    "sed -i 's/info/debug/' logger.conf.js && kill -s SIGHUP 1"
-  ID="$(compose_cmd "profile-clash-consolidation" "ps -q clash-profiles")"
-  docker logs "$ID" -f --tail 100 | pino_pretty
+  log_consolidate
 }
 
 reset_consolidate () {
@@ -94,5 +98,9 @@ to_lowercase () {
 
 select_udp () {
   grep --line-buffered -x -E '[[:lower:].0-9-]*' \
-  | grep --line-buffered -v -E 'cn|qq|tao|xyz|bili'
+  | grep --line-buffered -v -E 'xyz|bili'
+}
+
+ls_helpers () {
+  declare -F | grep -v -E '^declare -f _'
 }
