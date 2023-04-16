@@ -116,27 +116,6 @@ done
 set -- "${POSITIONAL_ARGS[@]}"
 
 if [ "$WARP" == "TRUE" ]; then
-ADDTIONAL_SERVICES="
-  wgcf:
-    image: neilpang/wgcf-docker:latest
-    networks:
-      - caddy
-    volumes:
-      - ./wgcf:/wgcf
-      - /lib/modules:/lib/modules
-    privileged: true
-    sysctls:
-      net.ipv6.conf.all.disable_ipv6: 0
-    cap_add:
-      - NET_ADMIN
-    logging:
-      options:
-        max-size: "10m"
-        max-file: "3"
-    ports:
-      - "$PORT:443"
-    restart: unless-stopped
-"
 PREFIX="Warp ${PREFIX}"
 FILE_PREFIX="warp-${FILE_PREFIX}"
 fi
@@ -157,6 +136,7 @@ if [ "$caddy_network_exists" == "true" ]; then
   green "Creating Trojan config..."
   jq -s add ./trojan/config/config.json <(cat <<EOF
 {
+  "remote_addr": "172.24.0.2",
   "tcp": {
     ${TCP_OVERRIDE}
     "no_delay": true,
@@ -211,10 +191,67 @@ EOF
   # mv ./caddy/config/clash.yml ./caddy/config/clash-v6-before-"$PORT".yml
   mv "./caddy/config/clash-$FILE_PREFIX-$PORT.yml" ./caddy/config/clash.yml
 
+if [ "$WARP" == "TRUE" ]; then
   cat>"./profile-trojan-$FILE_PREFIX-$PORT.yml"<<EOF
 version: '3.9'
 services:
-$ADDTIONAL_SERVICES
+  wgcf:
+    image: neilpang/wgcf-docker:latest
+    networks:
+      - caddy
+    volumes:
+      - ./wgcf:/wgcf
+      - /lib/modules:/lib/modules
+    privileged: true
+    sysctls:
+      net.ipv6.conf.all.disable_ipv6: 0
+    cap_add:
+      - NET_ADMIN
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped
+    ports:
+      - "$PORT:443"
+  trojan:
+    image: trojangfw/trojan:latest
+    network_mode: "service:wgcf"
+    networks:
+      - caddy
+    depends_on:
+      - wgcf
+    volumes:
+      - ./trojan/config:/config
+      - ./ssl:/ssl
+    working_dir: /config
+    labels:
+      - caddy=http://:8080
+      - caddy.@port-$PORT.expression={http.request.port} == $PORT
+      - caddy.@port-$PORT.path=/*
+      - caddy.reverse_proxy=@port-$PORT "$ORIGINS"
+      - caddy.reverse_proxy.header_up=Host {http.reverse_proxy.upstream.hostport}
+      - caddy.reverse_proxy.method=GET
+      - caddy.reverse_proxy.transport=http
+      - caddy.reverse_proxy.transport.dial_timeout=3s
+      - caddy.reverse_proxy.transport.response_header_timeout=1s
+      - caddy.reverse_proxy.transport.keepalive_idle_conns=10
+      - caddy.reverse_proxy.transport.max_conns_per_host=20
+      - caddy.reverse_proxy.transport.write_timeout=5s
+    command: [ "trojan", "config-$FILE_PREFIX-$PORT.json" ]
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped
+networks:
+  caddy:
+    external: true
+EOF
+else
+  cat>"./profile-trojan-$FILE_PREFIX-$PORT.yml"<<EOF
+version: '3.9'
+services:
   trojan:
     image: trojangfw/trojan:latest
     ports:
@@ -248,6 +285,7 @@ networks:
   caddy:
     external: true
 EOF
+fi
   # additional_options="$( [ "$BUILD" == "YES" ] && echo "--build" || /bin/true )"
   if [ "$BUILD" == "YES" ]; then
     docker-compose -p "profile-trojan-$FILE_PREFIX-$PORT" -f "./profile-trojan-$FILE_PREFIX-$PORT.yml" --env-file /dev/null down

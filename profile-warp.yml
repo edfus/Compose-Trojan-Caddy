@@ -17,6 +17,8 @@ services:
         max-size: "10m"
         max-file: "3"
     restart: unless-stopped
+    ports:
+      - "${PORT:-12931}:443"
   # test:
   #   image: curlimages/curl
   #   network_mode: "service:wgcf"
@@ -34,8 +36,6 @@ services:
     network_mode: "service:wgcf"
     depends_on:
       - wgcf
-    ports:
-      - "${PORT:-12931}:443"
     volumes:
       - ./trojan/config:/config
       - ./ssl:/ssl
