@@ -618,6 +618,11 @@ EOM
       ./srv-ipv4-fallback.sh --port "${PORT_NUMBER}" --origins "https://www.papercut.com"
       background_spawn ./srv-watch-and-reload.sh "profile-trojan-ipv4-$PORT_NUMBER" "trojan"
       ./srv-crontab-reload.sh --add-compose-cmd "profile-trojan-ipv4-$PORT_NUMBER" restart "trojan"
+  
+      PORT_NUMBER="$(shuf -i 2000-65000 -n 1)"
+      ./srv-warp-fallback.sh --port "${PORT_NUMBER}" --origins "https://chopra.com"
+      background_spawn ./srv-watch-and-reload.sh "profile-trojan-warp-$PORT_NUMBER" "trojan"
+      ./srv-crontab-reload.sh --add-compose-cmd "profile-trojan-warp-$PORT_NUMBER" restart "trojan"
   fi
 
     read -e -i "n" -p "$(blue 'Set up crontab jobs? (Y/n) ')" crontab

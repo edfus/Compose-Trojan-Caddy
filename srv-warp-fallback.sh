@@ -190,6 +190,8 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    ports:
+      - "$PORT:443"
     restart: unless-stopped
 
   trojan:
@@ -197,8 +199,6 @@ services:
     network_mode: "service:wgcf"
     depends_on:
       - wgcf
-    ports:
-      - "$PORT:443"
     volumes:
       - ./trojan/config:/config
       - ./ssl:/ssl
