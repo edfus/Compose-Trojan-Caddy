@@ -120,6 +120,10 @@ PREFIX="Warp ${PREFIX}"
 FILE_PREFIX="warp-${FILE_PREFIX}"
 fi
 
+if ! command -v jq >/dev/null; then
+  $PKGMANAGER -y install jq
+fi
+
 docker network inspect caddy >/dev/null 2>&1
 caddy_network_exists=`[ $? == 0 ] && echo "true" || echo "false"`
 
