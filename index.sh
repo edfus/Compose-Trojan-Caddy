@@ -678,6 +678,8 @@ UP=
 DOWN=
 CONSOLIDATE=
 INITIALIZE=YES
+UPDATE=
+UPDATED=
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -714,6 +716,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     update)
       UPDATE=YES
+      shift # past argument
+      ;;
+    --updated)
+      UPDATED=YES
       shift # past argument
       ;;
     -I|--injections)
@@ -757,11 +763,13 @@ if [ "$DOWN" == YES ]; then
   down
 fi
 
-if [ "$UPDATE" == YES ]; then
+if [ "$UPDATE" == YES ] && [ "$UPDATED" != YES ]; then
   git reset --hard @{u}
   # git reset --hard HEAD
   git pull origin master
   chmod +x *.sh
+  exec "$0" "$@" --updated
+  exit $?
 fi
 
 if [ "$UP" == YES ]; then
