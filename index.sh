@@ -768,6 +768,7 @@ if [ "$UPDATE" == YES ] && [ "$UPDATED" != YES ]; then
   # git reset --hard HEAD
   git pull origin master
   chmod +x *.sh
+  echo exec "$0" "$@" --updated
   exec "$0" "$@" --updated
   exit $?
 fi
