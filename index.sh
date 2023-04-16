@@ -669,6 +669,7 @@ if [[ $# -eq 0 ]]; then
   exit
 fi
 
+ORIGINAL_ARGS=("$@")
 COMMANDS_ON_EXIT=()
 
 # https://stackoverflow.com/a/14203146/13910382
@@ -768,8 +769,9 @@ if [ "$UPDATE" == YES ] && [ "$UPDATED" != YES ]; then
   # git reset --hard HEAD
   git pull origin master
   chmod +x *.sh
-  echo exec "$0" "$@" --updated
-  exec "$0" "$@" --updated
+  ORIGINAL_ARGS+=("--updated")
+  echo exec "$0" "${ORIGINAL_ARGS[@]}"
+  exec exec "$0" "${ORIGINAL_ARGS[@]}"
   exit $?
 fi
 
