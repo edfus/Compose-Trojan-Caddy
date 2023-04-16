@@ -1,5 +1,15 @@
 #!/bin/bash
 
+blue () {
+    echo -e "\033[34m\033[01m$1\033[0m"
+}
+green () {
+    echo -e "\033[32m\033[01m$1\033[0m"
+}
+red () {
+    echo -e "\033[31m\033[01m$1\033[0m"
+}
+
 ls_all_envfiles () {
   LC_ALL=C ls .env .*.env
 }
@@ -99,12 +109,12 @@ envfile=".`basename -s .sh "$0"`.env"
 
 set +e
 set -o allexport
-source "$envfile"
+test -f "$envfile" && source "$envfile"
 set +o allexport
 
 
 set -e
-if [ "$ADD" == "TRUE" || "$INSERT" == "TRUE" ]; then
+if [ "$ADD" == "TRUE" ] || [ "$INSERT" == "TRUE" ]; then
   cron_job="${PERIOD} ${COMMAND}"
 
   # Add the cron job to the current user's crontab
