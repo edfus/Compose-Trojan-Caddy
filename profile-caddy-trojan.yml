@@ -35,7 +35,8 @@ services:
     environment:
       - CADDY_INGRESS_NETWORKS=caddy
     networks:
-      - caddy
+      caddy:
+        ipv4_address: 172.24.0.2
     labels:
       caddy_0.servers.protocols: h1 h2 h2c
       caddy_0.log.output: stdout

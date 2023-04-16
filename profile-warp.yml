@@ -1,0 +1,65 @@
+version: '3.9'
+services:
+  wgcf:
+    image: neilpang/wgcf-docker:latest
+    networks:
+      - caddy
+    volumes:
+      - ./wgcf:/wgcf
+      - /lib/modules:/lib/modules
+    privileged: true
+    sysctls:
+      net.ipv6.conf.all.disable_ipv6: 0
+    cap_add:
+      - NET_ADMIN
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped
+  # test:
+  #   image: curlimages/curl
+  #   network_mode: "service:wgcf"
+  #   depends_on:
+  #     - wgcf
+  #   command: curl ipinfo.io
+  # test-caddy:
+  #   image: curlimages/curl
+  #   network_mode: "service:wgcf"
+  #   depends_on:
+  #     - wgcf
+  #   command: curl 172.24.0.2:8080
+  trojan:
+    image: trojangfw/trojan:latest
+    network_mode: "service:wgcf"
+    depends_on:
+      - wgcf
+    ports:
+      - "${PORT:-12931}:443"
+    volumes:
+      - ./trojan/config:/config
+      - ./ssl:/ssl
+    working_dir: /config
+    labels:
+      - caddy=http://:8080
+      - caddy.@port-${PORT:-12931}.expression={http.request.port} == ${PORT:-12931}
+      - caddy.@port-${PORT:-12931}.path=/*
+      - caddy.reverse_proxy=@port-${PORT:-12931} "$ORIGINS"
+      - caddy.reverse_proxy.header_up=Host {http.reverse_proxy.upstream.hostport}
+      - caddy.reverse_proxy.method=GET
+      - caddy.reverse_proxy.transport=http
+      - caddy.reverse_proxy.transport.dial_timeout=3s
+      - caddy.reverse_proxy.transport.response_header_timeout=1s
+      - caddy.reverse_proxy.transport.keepalive_idle_conns=10
+      - caddy.reverse_proxy.transport.max_conns_per_host=20
+      - caddy.reverse_proxy.transport.write_timeout=5s
+    command: [ "trojan", "config-warp-${PORT:-12931}.json" ]
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped
+    
+networks:
+  caddy:
+    external: true

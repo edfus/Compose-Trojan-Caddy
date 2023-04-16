@@ -282,8 +282,8 @@ EOF
       #   ipv6_caddy_block="$ipv6_cidr_addr/80"
       # fi
 
-      echo "+ docker network create --ipv6 --subnet $ipv6_range caddy"
-      docker network create --ipv6 --subnet "$ipv6_range" caddy > /dev/null
+      echo "+ docker network create --driver bridge --subnet 172.24.0.0/16 --gateway 172.24.0.1 --ipv6 --subnet $ipv6_range caddy"
+      docker network create --driver bridge --subnet 172.24.0.0/16 --gateway 172.24.0.1 --ipv6 --subnet "$ipv6_range" caddy > /dev/null
       echo "+ docker run --rm --network caddy curlimages/curl curl -s -6 -m 5 icanhazip.com"
     fi
 
@@ -380,7 +380,7 @@ EOF
   green "Spinning up the reverse proxy..."
   set +e
   [ "`docker network inspect caddy >/dev/null 2>&1; echo $?`" != 0 ] \
-  && docker network create caddy
+  && docker network create --driver bridge --subnet 172.24.0.0/16 --gateway 172.24.0.1 caddy
   
   compose_up "profile-caddy-trojan"
 
