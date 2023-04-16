@@ -64,7 +64,12 @@ POSITIONAL_ARGS=()
 
 BUILD=
 PORT=6443
-ORIGINS="https://prom.ua https://evo.company https://batcaddy.com" 
+PREFIX=IPv6
+TCP_OVERRIDE=
+FILE_PREFIX=v6
+ORIGINS="https://prom.ua https://evo.company https://batcaddy.com"
+WARP=FALSE 
+ADDTIONAL_SERVICES=
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -74,6 +79,17 @@ while [[ $# -gt 0 ]]; do
       ;;
     -p|--port)
       PORT="$2"
+      shift # past argument
+      shift # past argument
+      ;;
+    -w|--warp)
+      WARP="TRUE"
+      shift # past argument
+      ;;
+    -i|--ipv4)
+      PREFIX=IPv4
+      FILE_PREFIX=v4
+      TCP_OVERRIDE='"prefer_ipv4": true,'
       shift # past argument
       shift # past argument
       ;;
@@ -100,6 +116,32 @@ done
 # restore positional parameters
 set -- "${POSITIONAL_ARGS[@]}"
 
+if [ "$WARP" == "TRUE" ]; then
+ADDTIONAL_SERVICES="
+  wgcf:
+    image: neilpang/wgcf-docker:latest
+    networks:
+      - caddy
+    volumes:
+      - ./wgcf:/wgcf
+      - /lib/modules:/lib/modules
+    privileged: true
+    sysctls:
+      net.ipv6.conf.all.disable_ipv6: 0
+    cap_add:
+      - NET_ADMIN
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+    ports:
+      - "$PORT:443"
+    restart: unless-stopped
+"
+PREFIX="Warp ${PREFIX}"
+FILE_PREFIX="warp-${FILE_PREFIX}"
+fi
+
 docker network inspect caddy >/dev/null 2>&1
 caddy_network_exists=`[ $? == 0 ] && echo "true" || echo "false"`
 
@@ -117,7 +159,7 @@ if [ "$caddy_network_exists" == "true" ]; then
   jq -s add ./trojan/config/config.json <(cat <<EOF
 {
   "tcp": {
-    "prefer_ipv4": true,
+    ${TCP_OVERRIDE}
     "no_delay": true,
     "keep_alive": true,
     "fast_open": false,
@@ -125,7 +167,7 @@ if [ "$caddy_network_exists" == "true" ]; then
   }
 }
 EOF
-)  > "./trojan/config/config-v4-$PORT.json"
+)  > "./trojan/config/config-$FILE_PREFIX-$PORT.json"
 
   green "Checking the validity of Clash config..."
   proxy_exists=$(docker run --rm -v "${PWD}":/workdir mikefarah/yq \
@@ -147,12 +189,12 @@ EOF
   docker run -i --rm -v "${PWD}":/workdir mikefarah/yq \
   'del(
       .proxy-groups[] | select(.name == "Proxy") | 
-      .proxies[] | select(.name == "'"$CONFIG_PROFILE_NAME"' IPv4 '"$PORT"'")
+      .proxies[] | select(.name == "'"$CONFIG_PROFILE_NAME"' '"${PREFIX}"' '"$PORT"'")
       ) |
-    del(.proxies[] | select(.name == "'"$CONFIG_PROFILE_NAME"' IPv4 '"$PORT"'")) |
+    del(.proxies[] | select(.name == "'"$CONFIG_PROFILE_NAME"' '"${PREFIX}"' '"$PORT"'")) |
     .proxies = .proxies + ( 
       .proxies[] | select(.name == "'"$CONFIG_PROFILE_NAME"'") | {
-        "name": .name + " IPv4 '"$PORT"'",
+        "name": .name + " '"${PREFIX}"' '"$PORT"'",
         "type": .type,
         "server": .server,
         "port": '"$PORT"',
@@ -163,16 +205,17 @@ EOF
     ) |
     (
       (.proxy-groups[] | select(.name == "Proxy"))
-      .proxies += "'"$CONFIG_PROFILE_NAME"' IPv4 '"$PORT"'" 
+      .proxies += "'"$CONFIG_PROFILE_NAME"' '"${PREFIX}"' '"$PORT"'" 
     )
-  ' ./caddy/config/clash.yml > "./caddy/config/clash-v4-$PORT.yml"
+  ' ./caddy/config/clash.yml > "./caddy/config/clash-$FILE_PREFIX-$PORT.yml"
   
   # mv ./caddy/config/clash.yml ./caddy/config/clash-v6-before-"$PORT".yml
-  mv "./caddy/config/clash-v4-$PORT.yml" ./caddy/config/clash.yml
+  mv "./caddy/config/clash-$FILE_PREFIX-$PORT.yml" ./caddy/config/clash.yml
 
-  cat>"./profile-trojan-ipv4-$PORT.yml"<<EOF
+  cat>"./profile-trojan-$FILE_PREFIX-$PORT.yml"<<EOF
 version: '3.9'
 services:
+$ADDTIONAL_SERVICES
   trojan:
     image: trojangfw/trojan:latest
     ports:
@@ -196,7 +239,7 @@ services:
       - caddy.reverse_proxy.transport.write_timeout=5s
     networks:
       - caddy
-    command: [ "trojan", "config-v4-$PORT.json" ]
+    command: [ "trojan", "config-$FILE_PREFIX-$PORT.json" ]
     logging:
       options:
         max-size: "10m"
@@ -208,12 +251,12 @@ networks:
 EOF
   # additional_options="$( [ "$BUILD" == "YES" ] && echo "--build" || /bin/true )"
   if [ "$BUILD" == "YES" ]; then
-    docker-compose -p "profile-trojan-ipv4-$PORT" -f "./profile-trojan-ipv4-$PORT.yml" --env-file /dev/null down
+    docker-compose -p "profile-trojan-$FILE_PREFIX-$PORT" -f "./profile-trojan-$FILE_PREFIX-$PORT.yml" --env-file /dev/null down
   fi
-  docker-compose -p "profile-trojan-ipv4-$PORT" -f "./profile-trojan-ipv4-$PORT.yml" --env-file /dev/null up -d
+  docker-compose -p "profile-trojan-$FILE_PREFIX-$PORT" -f "./profile-trojan-$FILE_PREFIX-$PORT.yml" --env-file /dev/null up -d
   if [ $? != 0 ]; then
-    docker-compose -p "profile-trojan-ipv4-$PORT" -f "./profile-trojan-ipv4-$PORT.yml" --env-file /dev/null down
-    docker-compose -p "profile-trojan-ipv4-$PORT" -f "./profile-trojan-ipv4-$PORT.yml" --env-file /dev/null up -d
+    docker-compose -p "profile-trojan-$FILE_PREFIX-$PORT" -f "./profile-trojan-$FILE_PREFIX-$PORT.yml" --env-file /dev/null down
+    docker-compose -p "profile-trojan-$FILE_PREFIX-$PORT" -f "./profile-trojan-$FILE_PREFIX-$PORT.yml" --env-file /dev/null up -d
   fi
 else
   warn
