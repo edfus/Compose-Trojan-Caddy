@@ -91,7 +91,6 @@ while [[ $# -gt 0 ]]; do
       FILE_PREFIX=v4
       TCP_OVERRIDE='"prefer_ipv4": true,'
       shift # past argument
-      shift # past argument
       ;;
     -o|--origins|--origin)
       ORIGINS="$2"
