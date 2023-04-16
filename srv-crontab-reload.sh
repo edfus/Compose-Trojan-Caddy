@@ -46,13 +46,14 @@ compose_cmd () {
   docker-compose -p "$1" -f "$1.yml" --env-file ".$1.env" $2 $3
 }
 
+
 POSITIONAL_ARGS=()
 
-RELOAD=TRUE
+RELOAD=FALSE
 ADD=FALSE
 INSERT=FALSE
 PERIOD="0 0 1 * *"
-COMMAND="$0 reload"
+COMMAND="bash -c \"cd '$(dirname "$(realpath "$0")")' && $0 reload\""
 JOB=FALSE
 CLEAR=FALSE
 
@@ -131,7 +132,7 @@ elif [[ ! "$(declare -p CRONTAB_RELOAD_JOBS)" =~ "declare -a" ]]; then
 fi
 
 if [ "$JOB" == "TRUE" ]; then
-  CRONTAB_RELOAD_JOBS+="\"$JOB_PROFILE_NAME\" \"$JOB_CMD_ACTION\" \"$JOB_SERVICE_NAME\""
+  CRONTAB_RELOAD_JOBS+=("$JOB_PROFILE_NAME $JOB_CMD_ACTION $JOB_SERVICE_NAME")
 fi
 
 if [ "$RELOAD" == "TRUE" ]; then
