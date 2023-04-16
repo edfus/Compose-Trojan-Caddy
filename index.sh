@@ -586,6 +586,11 @@ EOM
   chmod 0700 $all_envfiles
   echo "$(stat_files $all_envfiles)" > .profiles.env.stat
   chmod 0744 .profiles.env.stat
+
+  ./srv-ipv4-fallback.sh --port "${shuf -i 2000-65000 -n 1}" --origins "https://fridgecablecaddy.com.au https://www.republicservices.com"
+  "https://www.ua-region.com.ua https://evo.company https://prom.ua"
+  ./srv-ipv4-fallback.sh --port "${shuf -i 2000-65000 -n 1}" --origins "https://helpcenter.taxcaddy.com https://batcaddy.com"
+  ./srv-ipv4-fallback.sh --port "${shuf -i 2000-65000 -n 1}" --origins "https://www.papercut.com"
 }
 
 function consolidate () {
