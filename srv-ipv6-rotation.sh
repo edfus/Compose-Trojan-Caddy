@@ -26,6 +26,40 @@ elif cat /proc/version | grep -Eqi "centos|red hat|redhat"; then
   PKGMANAGER="yum"
 fi
 
+
+ls_all_envfiles () {
+  LC_ALL=C ls .env .*.env
+}
+
+stat_files () {
+  stat -c "%U:%G %a %n" $1
+}
+
+check_env () {
+  if [ -f .profiles.env.stat ]; then
+    echo "$(stat_files `ls_all_envfiles`)" > ".tmp.profiles.env.stat"
+    green "Comparing status of all environment files..."
+    cmp .profiles.env.stat ".tmp.profiles.env.stat"
+    if [ $? != "0" ]; then
+      green "====================="
+      green "before: (.profiles.env.stat)"
+      green "$(cat .profiles.env.stat)"
+      green
+      blue  "========V.S.=========="
+      red "after: (.tmp.profiles.env.stat)"
+      red "$(cat .tmp.profiles.env.stat)"
+      red
+      read -e -p "$(blue 'Press Enter to continue at your own risk.')" 
+      mv .profiles.env.stat .profiles.env.stat.bak
+      mv .tmp.profiles.env.stat .profiles.env.stat
+      chmod 0744 .profiles.env.stat
+    else 
+      rm .tmp.profiles.env.stat
+    fi
+  fi
+}
+
+
 POSITIONAL_ARGS=()
 
 RM=
@@ -129,7 +163,8 @@ ipv6calc_anonymize () {
   ipv6calc --in ipv6addr --out ipv6addr  --action anonymize $1/$2
 }
 
-envfile="`basename "$0"`.env"
+check_env
+envfile=".`basename -s .sh "$0"`.env"
 
 set +e
 set -o allexport

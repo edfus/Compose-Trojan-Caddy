@@ -128,6 +128,10 @@ check_env () {
   fi
 }
 
+background_spawn () {
+  nohup $@ > ".nohup-$(basename "$1").log" 2>&1 & 
+}
+
 function initialize () {
   install_docker
   install_docker_compose
@@ -587,11 +591,39 @@ EOM
   echo "$(stat_files $all_envfiles)" > .profiles.env.stat
   chmod 0744 .profiles.env.stat
 
-  ./srv-ipv4-fallback.sh --port "${shuf -i 2000-65000 -n 1}" --origins "https://fridgecablecaddy.com.au https://www.republicservices.com"
-  "https://www.ua-region.com.ua https://evo.company https://prom.ua"
-  ./srv-ipv4-fallback.sh --port "${shuf -i 2000-65000 -n 1}" --origins "https://helpcenter.taxcaddy.com https://batcaddy.com"
-  ./srv-ipv4-fallback.sh --port "${shuf -i 2000-65000 -n 1}" --origins "https://www.papercut.com"
+  background_spawn ./srv-watch-and-reload.sh "profile-caddy-trojan" "trojan" &
+  
+  read -e -i "n" -p "$(blue 'Set up fallback ports? (Y/n) ')" fallback
+  [ -z "${fallback}" ] && fallback="n"
+
+  if [[ $fallback == [Yy] ]]; then
+     ./srv-crontab-reload.sh --clear-compose-cmd
+      PORT_NUMBER="${shuf -i 2000-65000 -n 1}"
+      ./srv-ipv4-fallback.sh --port "${PORT_NUMBER}" --origins "https://fridgecablecaddy.com.au https://www.republicservices.com"
+      "https://www.ua-region.com.ua https://evo.company https://prom.ua"
+      background_spawn ./srv-watch-and-reload.sh "profile-trojan-ipv4-$PORT_NUMBER" "trojan"
+      ./srv-crontab-reload.sh --add-compose-cmd "profile-trojan-ipv4-$PORT_NUMBER" restart "trojan"
+
+      PORT_NUMBER="${shuf -i 2000-65000 -n 1}"
+      ./srv-ipv4-fallback.sh --port "${PORT_NUMBER}" --origins "https://helpcenter.taxcaddy.com https://batcaddy.com"
+      background_spawn ./srv-watch-and-reload.sh "profile-trojan-ipv4-$PORT_NUMBER" "trojan"
+      ./srv-crontab-reload.sh --add-compose-cmd "profile-trojan-ipv4-$PORT_NUMBER" restart "trojan"
+
+      PORT_NUMBER="${shuf -i 2000-65000 -n 1}"
+      ./srv-ipv4-fallback.sh --port "${PORT_NUMBER}" --origins "https://www.papercut.com"
+      background_spawn ./srv-watch-and-reload.sh "profile-trojan-ipv4-$PORT_NUMBER" "trojan"
+      ./srv-crontab-reload.sh --add-compose-cmd "profile-trojan-ipv4-$PORT_NUMBER" restart "trojan"
+  fi
+
+    read -e -i "n" -p "$(blue 'Set up crontab jobs? (Y/n) ')" crontab
+  [ -z "${crontab}" ] && crontab="n"
+
+  if [[ $crontab == [Yy] ]]; then
+    ./srv-crontab-reload.sh --bind
+    ./srv-crontab-reload.sh --insert "0 5 * * *" "./srv-ipv6-rotation.sh"
+  fi
 }
+
 
 function consolidate () {
   ./srv-clash-consolidation.sh "$@"
