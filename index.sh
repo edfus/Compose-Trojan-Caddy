@@ -771,7 +771,7 @@ if [ "$UPDATE" == YES ] && [ "$UPDATED" != YES ]; then
   chmod +x *.sh
   ORIGINAL_ARGS+=("--updated")
   echo exec "$0" "${ORIGINAL_ARGS[@]}"
-  exec exec "$0" "${ORIGINAL_ARGS[@]}"
+  exec "$0" "${ORIGINAL_ARGS[@]}"
   exit $?
 fi
 
