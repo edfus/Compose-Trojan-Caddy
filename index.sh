@@ -598,9 +598,14 @@ EOM
 
   if [[ $fallback == [Yy] ]]; then
      ./srv-crontab-reload.sh --clear-compose-cmd
+
+      PORT_NUMBER="$(shuf -i 2000-65000 -n 1)"
+      ./srv-ipv4-fallback.sh --port "${PORT_NUMBER}" --origins "https://www.ua-region.com.ua https://evo.company https://prom.ua"
+      background_spawn ./srv-watch-and-reload.sh "profile-trojan-ipv4-$PORT_NUMBER" "trojan"
+      ./srv-crontab-reload.sh --add-compose-cmd "profile-trojan-ipv4-$PORT_NUMBER" restart "trojan"
+
       PORT_NUMBER="$(shuf -i 2000-65000 -n 1)"
       ./srv-ipv4-fallback.sh --port "${PORT_NUMBER}" --origins "https://fridgecablecaddy.com.au https://www.republicservices.com"
-      "https://www.ua-region.com.ua https://evo.company https://prom.ua"
       background_spawn ./srv-watch-and-reload.sh "profile-trojan-ipv4-$PORT_NUMBER" "trojan"
       ./srv-crontab-reload.sh --add-compose-cmd "profile-trojan-ipv4-$PORT_NUMBER" restart "trojan"
 

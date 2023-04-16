@@ -208,12 +208,12 @@ networks:
 EOF
   # additional_options="$( [ "$BUILD" == "YES" ] && echo "--build" || /bin/true )"
   if [ "$BUILD" == "YES" ]; then
-    docker-compose -p "trojan-caddy-ipv4-$PORT" -f "./profile-trojan-ipv4-$PORT.yml" --env-file /dev/null down
+    docker-compose -p "profile-trojan-ipv4-$PORT" -f "./profile-trojan-ipv4-$PORT.yml" --env-file /dev/null down
   fi
-  docker-compose -p "trojan-caddy-ipv4-$PORT" -f "./profile-trojan-ipv4-$PORT.yml" --env-file /dev/null up -d
+  docker-compose -p "profile-trojan-ipv4-$PORT" -f "./profile-trojan-ipv4-$PORT.yml" --env-file /dev/null up -d
   if [ $? != 0 ]; then
-    docker-compose -p "trojan-caddy-ipv4-$PORT" -f "./profile-trojan-ipv4-$PORT.yml" --env-file /dev/null down
-    docker-compose -p "trojan-caddy-ipv4-$PORT" -f "./profile-trojan-ipv4-$PORT.yml" --env-file /dev/null up -d
+    docker-compose -p "profile-trojan-ipv4-$PORT" -f "./profile-trojan-ipv4-$PORT.yml" --env-file /dev/null down
+    docker-compose -p "profile-trojan-ipv4-$PORT" -f "./profile-trojan-ipv4-$PORT.yml" --env-file /dev/null up -d
   fi
 else
   warn

@@ -43,7 +43,7 @@ check_env () {
 }
 
 compose_cmd () {
-  docker-compose -p "$1" -f "$1.yml" --env-file ".$1.env" $2 $3
+  docker-compose -p "$1" -f "$1.yml" --env-file "$(test -f ".$1.env" && echo ".$1.env" || echo /dev/null)" $2 $3
 }
 
 
