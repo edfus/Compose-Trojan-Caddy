@@ -18,7 +18,8 @@ services:
       - caddy_1.tls.issuer.disable_tlsalpn_challenge=
     command: ["sh", "/wait-for-certificates.sh", "trojan", "config.json"]
     networks:
-      - caddy
+      caddy:
+        ipv4_address: 172.24.0.3
     logging:
       options:
         max-size: "10m"
