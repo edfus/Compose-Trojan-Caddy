@@ -68,14 +68,19 @@ get_random_safe_port() {
 
 # Function to get a random available port
 get_random_available_port() {
+  port_available=false
     while true; do
         random_safe_port=$(get_random_safe_port)
         is_port_free $random_safe_port
         if [[ $? -eq 0 ]]; then
             echo $random_safe_port
+            port_available=true
             break
         fi
     done
+  if [ "$port_available" == "false" ]; then
+    echo $(shuf -i 2000-65000 -n 1)
+  fi
 }
 
 check_env
@@ -90,18 +95,18 @@ set +e
 # ./srv-crontab-reload.sh --clear-compose-cmd
 
 # ipv4
-PORT_NUMBER="${$(get_random_available_port):-$(shuf -i 2000-65000 -n 1)}"
+PORT_NUMBER="$(get_random_available_port)"
 ./srv-fallback.sh --port "${PORT_NUMBER}" --ipv4 --origins "https://helpcenter.taxcaddy.com https://batcaddy.com"
 background_spawn ./srv-watch-and-reload.sh "profile-trojan-v4-$PORT_NUMBER" "trojan"
 ./srv-crontab-reload.sh --add-compose-cmd "profile-trojan-v4-$PORT_NUMBER" restart "trojan"
 
-PORT_NUMBER="${$(get_random_available_port):-$(shuf -i 2000-65000 -n 1)}"
+PORT_NUMBER="$(get_random_available_port)"
 ./srv-fallback.sh --port "${PORT_NUMBER}" --ipv4 --origins "https://www.papercut.com"
 background_spawn ./srv-watch-and-reload.sh "profile-trojan-v4-$PORT_NUMBER" "trojan"
 ./srv-crontab-reload.sh --add-compose-cmd "profile-trojan-v4-$PORT_NUMBER" restart "trojan"
 
 # warp
-PORT_NUMBER="${$(get_random_available_port):-$(shuf -i 2000-65000 -n 1)}"
+PORT_NUMBER="$(get_random_available_port)"
 ./srv-fallback.sh --port "${PORT_NUMBER}" --warp --ipv4 --origins "https://chopra.com"
 background_spawn ./srv-watch-and-reload.sh "profile-trojan-warp-v4-$PORT_NUMBER" "trojan"
 ./srv-crontab-reload.sh --add-compose-cmd "profile-trojan-warp-v4-$PORT_NUMBER" restart "trojan"
@@ -109,18 +114,18 @@ background_spawn ./srv-watch-and-reload.sh "profile-trojan-warp-v4-$PORT_NUMBER"
 caddy_ipv6_enabled=`docker network inspect caddy | jq '.[0].EnableIPv6'`
 if [ "$caddy_ipv6_enabled" == "true" ]; then
   # ipv6
-  PORT_NUMBER="${$(get_random_available_port):-$(shuf -i 2000-65000 -n 1)}"
+  PORT_NUMBER="$(get_random_available_port)"
   ./srv-fallback.sh --port "${PORT_NUMBER}" --origins "https://www.ua-region.com.ua https://evo.company https://prom.ua"
   background_spawn ./srv-watch-and-reload.sh "profile-trojan-v6-$PORT_NUMBER" "trojan"
   ./srv-crontab-reload.sh --add-compose-cmd "profile-trojan-v6-$PORT_NUMBER" restart "trojan"
 
-  PORT_NUMBER="${$(get_random_available_port):-$(shuf -i 2000-65000 -n 1)}"
+  PORT_NUMBER="$(get_random_available_port)"
   ./srv-fallback.sh --port "${PORT_NUMBER}" --origins "https://fridgecablecaddy.com.au https://www.republicservices.com"
   background_spawn ./srv-watch-and-reload.sh "profile-trojan-v6-$PORT_NUMBER" "trojan"
   ./srv-crontab-reload.sh --add-compose-cmd "profile-trojan-v6-$PORT_NUMBER" restart "trojan"
 
   # warp
-  PORT_NUMBER="${$(get_random_available_port):-$(shuf -i 2000-65000 -n 1)}"
+  PORT_NUMBER="$(get_random_available_port)"
   ./srv-fallback.sh --port "${PORT_NUMBER}" --warp --origins "https://www.japanla.com"
   background_spawn ./srv-watch-and-reload.sh "profile-trojan-warp-v6-$PORT_NUMBER" "trojan"
   ./srv-crontab-reload.sh --add-compose-cmd "profile-trojan-warp-v6-$PORT_NUMBER" restart "trojan"
