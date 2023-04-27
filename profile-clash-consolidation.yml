@@ -3,6 +3,7 @@ services:
   clash-profiles:
     expose:
       - "80"
+      - "9229"
     restart: unless-stopped
     build: ./$CONSOLIDATION_REPOSITORY_NAME/
     environment:
