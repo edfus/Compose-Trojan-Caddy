@@ -50,8 +50,8 @@ background_spawn () {
   nohup $@ > ".nohup-$(basename "$1").log" 2>&1 & 
 }
 
-# List of safe service ports (excluding 21, 22, 25, 80, and 443)
-SAFE_PORTS=(465 587 993 995 1433 1521 3306 3389 5432 6379 11211 27017 9200 9300 5601 27018 8080 8443 8888 9443 1080 1194 6000 6100 7000 7100 8000 8100 9000 9100)
+# List of safe service ports (excluding 21, 22, 25, 80, 1080, 1194, and 443)
+SAFE_PORTS=(465 587 993 995 1433 1521 3306 3389 5432 6379 11211 27017 9200 9300 5601 27018 8080 8443 8888 9443 6000 6100 7000 7100 8000 8100 9000 9100)
 
 # Function to check if a port is free
 is_port_free() {
@@ -68,19 +68,23 @@ get_random_safe_port() {
 
 # Function to get a random available port
 get_random_available_port() {
-  port_available=false
-    while true; do
-        random_safe_port=$(get_random_safe_port)
-        is_port_free $random_safe_port
-        if [[ $? -eq 0 ]]; then
-            echo $random_safe_port
-            port_available=true
-            break
-        fi
-    done
-  if [ "$port_available" == "false" ]; then
-    echo $(shuf -i 2000-65000 -n 1)
-  fi
+  while true; do
+      random_safe_port=$(get_random_safe_port)
+      is_port_free $random_safe_port
+      if [[ $? -eq 0 ]]; then
+          echo $random_safe_port
+          return
+      fi
+  done
+  while true; do
+      random_safe_port=$(shuf -e {7000..7100} {8000..8100} {9000..9100} -n 1)
+      is_port_free $random_safe_port
+      if [[ $? -eq 0 ]]; then
+          echo $random_safe_port
+          return
+      fi
+  done
+  echo $(shuf -i 2000-65000 -n 1)
 }
 
 check_env
