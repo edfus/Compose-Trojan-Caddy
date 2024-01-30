@@ -618,6 +618,55 @@ function schedule-ipv6-rotation () {
   ./srv-ipv6-rotation.sh "$@"
 }
 
+function check_root () {
+  # Check if the script is run with root privileges
+  if [ "$EUID" -ne 0 ]; then
+      echo "Please run the script with root privileges (e.g., sudo ./enable_bbr.sh)"
+      exit 1
+  fi
+}
+
+function check_bbr () {
+  # Check if the kernel supports BBR
+  kernel_version=$(uname -r)
+  required_version="4.9"
+
+  if [[ $(echo -e "${kernel_version}\n${required_version}" | sort -V | head -n1) == "${required_version}" ]]; then
+      echo "Your kernel version does not support BBR. Please update your kernel to at least version 4.9."
+      return 1
+  fi
+
+  # Check if BBR is enabled
+  bbr_enabled=$(sysctl net.ipv4.tcp_congestion_control | grep -c 'bbr')
+
+  # Display a warning message if BBR is not enabled
+  if [ $bbr_enabled -eq 0 ]; then
+    echo "BBR is not enabled on your system. Enabling BBR now..."
+
+    # Enable BBR
+    sysctl -w net.ipv4.tcp_congestion_control=bbr
+
+    # Check if enabling BBR was successful
+    if [ $? -ne 0 ]; then
+        echo "Failed to enable BBR. Please check your system configuration."
+        return 1
+    fi
+
+    # Make the change permanent by updating sysctl.conf
+    echo "net.ipv4.tcp_congestion_control=bbr" | tee -a /etc/sysctl.conf > /dev/null
+
+    if [ $? -ne 0 ]; then
+        echo "Failed to make BBR enabled permanently. Please check your system configuration."
+        return 1
+    fi
+
+    return 0
+  else
+      # echo "BBR is enabled on your system."
+      return 0
+  fi
+}
+
 function down () {
   set +e
   caddy_backends=`docker ps -qf "network=caddy"`

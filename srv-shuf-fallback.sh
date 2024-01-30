@@ -56,8 +56,17 @@ SAFE_PORTS=(465 587 993 995 1433 1521 3306 3389 5432 6379 11211 27017 9200 9300 
 # Function to check if a port is free
 is_port_free() {
     local port=$1
-    # Check if the port is in use, if not return 0 (free), else return 1 (in use)
-    (echo >/dev/tcp/127.0.0.1/$port) &>/dev/null && return 1 || return 0
+    # Set a timeout duration in seconds
+    local timeout_duration=5
+
+    # Use timeout command. If it times out, assume the port is in use
+    if timeout $timeout_duration bash -c "echo >/dev/tcp/127.0.0.1/$port" &>/dev/null; then
+        # If the command completes within the timeout, the port is in use
+        return 1
+    else
+        # If the command times out or fails, assume the port is free
+        return 0
+    fi
 }
 
 # Function to get a random safe port
