@@ -77,7 +77,8 @@ get_random_safe_port() {
 
 # Function to get a random available port
 get_random_available_port() {
-  while true; do
+  # Try 20 times using get_random_safe_port
+  for i in {1..20}; do
       random_safe_port=$(get_random_safe_port)
       is_port_free $random_safe_port
       if [[ $? -eq 0 ]]; then
@@ -85,7 +86,9 @@ get_random_available_port() {
           return
       fi
   done
-  while true; do
+
+  # Try 20 times using shuf for predefined port ranges
+  for i in {1..20}; do
       random_safe_port=$(shuf -e {7000..7100} {8000..8100} {9000..9100} -n 1)
       is_port_free $random_safe_port
       if [[ $? -eq 0 ]]; then
@@ -93,7 +96,9 @@ get_random_available_port() {
           return
       fi
   done
-  echo $(shuf -i 2000-65000 -n 1)
+
+  # As a last resort, shuffle a port number in a broader range
+  echo $(shuf -i 20000-60000 -n 1)
 }
 
 check_env
