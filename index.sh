@@ -611,6 +611,8 @@ EOM
 
 
 function consolidate () {
+  # https://superuser.com/a/276550
+  read -t 1 -n 10000 discard
   ./srv-clash-consolidation.sh "$@"
 }
 
